@@ -39,6 +39,7 @@ static struct sockaddr_un *ipc_sockaddr = NULL;
 static list_t *ipc_client_list = NULL;
 static struct wl_listener ipc_display_destroy;
 
+#if HAVE_IPC
 static const char ipc_magic[] = {'i', '3', '-', 'i', 'p', 'c'};
 
 #define IPC_HEADER_SIZE (sizeof(ipc_magic) + 8)
@@ -65,6 +66,7 @@ void ipc_client_handle_command(struct ipc_client *client, uint32_t payload_lengt
 	enum ipc_command_type payload_type);
 bool ipc_send_reply(struct ipc_client *client, enum ipc_command_type payload_type,
 	const char *payload, uint32_t payload_length);
+#endif
 
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	if (ipc_event_source) {
@@ -77,9 +79,11 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 		unlink(ipc_sockaddr->sun_path);
 	}
 
+#if HAVE_IPC
 	while (ipc_client_list->length) {
 		ipc_client_disconnect(ipc_client_list->items[ipc_client_list->length-1]);
 	}
+#endif
 	list_free(ipc_client_list);
 
 	free(ipc_sockaddr);
@@ -111,6 +115,7 @@ void ipc_init(struct sway_server *server) {
 		return;
 	}
 
+#if HAVE_IPC
 	ipc_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (ipc_socket == -1) {
 		sway_abort("Unable to create IPC socket");
@@ -146,6 +151,7 @@ void ipc_init(struct sway_server *server) {
 
 	ipc_event_source = wl_event_loop_add_fd(server->wl_event_loop, ipc_socket,
 			WL_EVENT_READABLE, ipc_handle_connection, server);
+#endif
 }
 
 struct sockaddr_un *ipc_user_sockaddr(void) {
@@ -170,6 +176,7 @@ struct sockaddr_un *ipc_user_sockaddr(void) {
 	return ipc_sockaddr;
 }
 
+#if HAVE_IPC
 int ipc_handle_connection(int fd, uint32_t mask, void *data) {
 	(void) fd;
 	struct sway_server *server = data;
@@ -289,7 +296,10 @@ int ipc_client_handle_readable(int client_fd, uint32_t mask, void *data) {
 	return 0;
 }
 
+#endif
+
 static bool ipc_has_event_listeners(enum ipc_command_type event) {
+#if HAVE_IPC
 	if (!ipc_client_list) {
 		return false;
 	}
@@ -299,10 +309,13 @@ static bool ipc_has_event_listeners(enum ipc_command_type event) {
 			return true;
 		}
 	}
+#endif
+	// Without IPC no client exists, and every event function stops here
 	return false;
 }
 
 static void ipc_send_event(const char *json_string, enum ipc_command_type event) {
+#if HAVE_IPC
 	struct ipc_client *client;
 	for (int i = 0; i < ipc_client_list->length; i++) {
 		client = ipc_client_list->items[i];
@@ -318,6 +331,7 @@ static void ipc_send_event(const char *json_string, enum ipc_command_type event)
 			i--;
 		}
 	}
+#endif
 }
 
 void ipc_event_workspace(struct sway_workspace *old,
@@ -445,6 +459,7 @@ void ipc_event_binding(struct sway_binding *binding) {
 	json_object_put(json);
 }
 
+#if HAVE_IPC
 static void ipc_event_tick(const char *payload) {
 	if (!ipc_has_event_listeners(IPC_EVENT_TICK)) {
 		return;
@@ -459,6 +474,7 @@ static void ipc_event_tick(const char *payload) {
 	ipc_send_event(json_string, IPC_EVENT_TICK);
 	json_object_put(json);
 }
+#endif
 
 void ipc_event_input(const char *change, struct sway_input_device *device) {
 	if (!ipc_has_event_listeners(IPC_EVENT_INPUT)) {
@@ -568,6 +584,7 @@ void ipc_event_log(sway_log_importance_t verbosity, const char *time,
 	json_object_put(json);
 }
 
+#if HAVE_IPC
 int ipc_client_handle_writable(int client_fd, uint32_t mask, void *data) {
 	struct ipc_client *client = data;
 
@@ -1107,3 +1124,4 @@ bool ipc_send_reply(struct ipc_client *client, enum ipc_command_type payload_typ
 
 	return true;
 }
+#endif

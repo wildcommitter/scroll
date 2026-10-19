@@ -1,0 +1,93 @@
+# Build and test the fork in Fedora 44: the full ASan pytest suite on the
+# default build, and the hardened minimal build that scroll-secure ships.
+# A weekly run also reports how far upstream has moved past this branch.
+name: ci
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: quay.io/fedora/fedora:44
+    env:
+      XDG_RUNTIME_DIR: /tmp/xdg
+      PYTHONDONTWRITEBYTECODE: "1"
+      COMMON: >-
+        -Db_sanitize=address -Dbuildtype=debugoptimized
+        -Dwlroots:default_library=static -Dwlroots:examples=false
+      MINIMAL: >-
+        -Dlua=disabled -Dipc=false -Dscrollbar=false
+        -Dwlroots:xwayland=disabled -Dwlroots:renderers=gles2
+        -Dwlroots:backends=drm,libinput
+    steps:
+      - name: Install dependencies
+        run: |
+          dnf -y install git meson ninja-build gcc lua-devel readline-devel scdoc \
+            'dnf5-command(builddep)' libasan python3-pytest python3-pytest-xdist \
+            libxcb-devel wayvnc binutils
+          dnf -y builddep wlroots sway
+      - uses: actions/checkout@v4
+      - name: Build (default)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          meson setup build $COMMON
+          ninja -C build
+      - name: Test (default, full suite)
+        run: |
+          mkdir -m 0700 -p "$XDG_RUNTIME_DIR"
+          python3 -m pytest -p no:cacheprovider -q -n 4 tests --scroll build/sway/scroll
+      - name: Build (minimal)
+        run: |
+          meson setup build-minimal $COMMON $MINIMAL
+          ninja -C build-minimal
+      - name: Test (minimal, no IPC, wayvnc)
+        run: |
+          mkdir -m 0700 -p "$XDG_RUNTIME_DIR"
+          # test_utils.py looks for ./build/tests/wayland-test-client
+          mkdir -p /tmp/minimal && ln -sfn "$PWD/build-minimal" /tmp/minimal/build
+          cd /tmp/minimal
+          python3 -m pytest -p no:cacheprovider -q -rs "$GITHUB_WORKSPACE/tests/test_ipc_disabled.py" \
+            --scroll "$GITHUB_WORKSPACE/build-minimal/sway/scroll"
+      - name: Check the minimal binary
+        run: |
+          b=build-minimal/sway/scroll
+          fail=0
+          for sym in ipc_client_handle_command luaL_newstate wlr_xwayland_create wlr_vk_renderer_create; do
+            if [ "$(nm "$b" | grep -c "$sym")" != 0 ]; then echo "::error::$sym present in minimal build"; fail=1; fi
+          done
+          [ ! -e build-minimal/swaymsg/scrollmsg ] || { echo "::error::scrollmsg built without IPC"; fail=1; }
+          exit $fail
+
+  upstream-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compare with upstream
+        run: |
+          git remote add upstream https://github.com/dawsers/scroll.git
+          git fetch -q upstream --tags
+          ahead=$(git rev-list --count HEAD..upstream/master)
+          tag=$(git describe --tags --abbrev=0 upstream/master)
+          {
+            echo "## Upstream drift"
+            echo
+            echo "- upstream/master has **$ahead** commits not in this branch"
+            echo "- latest upstream tag: \`$tag\`"
+            echo
+            echo "### wlroots / sway chases not in this branch"
+            echo '```'
+            git log --format='%h %ad %s' --date=short HEAD..upstream/master \
+              | grep -E 'wlroots chase|sway chase' | head -50 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$ahead" = 0 ] || echo "::warning::upstream/master is $ahead commits ahead"
