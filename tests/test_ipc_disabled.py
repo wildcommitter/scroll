@@ -21,9 +21,17 @@ def _wait(cond, timeout: float = 10.0) -> bool:
     return False
 
 
+VNC_PORT = 5917
+VNC_LOG = Path("/tmp/scroll-test-wayvnc.log")
+
+
+def _wayvnc_cmd(log: Path) -> str:
+    return f"wayvnc --config=/dev/null 127.0.0.1 {VNC_PORT} >{log} 2>&1"
+
+
 @pytest.fixture
 def no_ipc_compositor(
-    scroll_compositor_binary: str, tmp_path: Path
+    scroll_compositor_binary: str, tmp_path: Path, request: pytest.FixtureRequest
 ) -> Generator[tuple[subprocess.Popen, Path, dict], None, None]:
     run = tmp_path / "run"
     run.mkdir(mode=0o700)
@@ -39,7 +47,7 @@ def no_ipc_compositor(
         LSAN_OPTIONS="detect_leaks=0",
     )
     config = tmp_path / "config"
-    config.write_text(CONFIG)
+    config.write_text(CONFIG + getattr(request, "param", ""))
     log_path = tmp_path / "scroll.log"
     with open(log_path, "w") as log:
         proc = subprocess.Popen(
@@ -77,19 +85,30 @@ def _recv(sock: socket.socket, n: int) -> bytes:
 
 
 @pytest.mark.skipif(shutil.which("wayvnc") is None, reason="wayvnc not installed")
+def test_unprivileged_wayvnc_refused(
+    no_ipc_compositor: tuple[subprocess.Popen, Path, dict], tmp_path: Path
+) -> None:
+    # Started outside scroll, wayvnc gets no virtual input or screen capture
+    _, _, env = no_ipc_compositor
+    res = subprocess.run(
+        ["wayvnc", "--config=/dev/null", "127.0.0.1", str(VNC_PORT)],
+        env=env, capture_output=True, text=True, timeout=10,
+    )
+    assert res.returncode != 0
+    assert "not supported by compositor" in res.stdout + res.stderr
+
+
+@pytest.mark.skipif(shutil.which("wayvnc") is None, reason="wayvnc not installed")
+@pytest.mark.parametrize(
+    "no_ipc_compositor", [f"exec_privileged {_wayvnc_cmd(VNC_LOG)}\n"],
+    indirect=True,
+)
 def test_wayvnc_without_ipc(
     no_ipc_compositor: tuple[subprocess.Popen, Path, dict], tmp_path: Path
 ) -> None:
     proc, _, env = no_ipc_compositor
-    port = 5917
-    vnc_log = tmp_path / "wayvnc.log"
-    with open(vnc_log, "w") as log:
-        vnc = subprocess.Popen(
-            ["wayvnc", "--config=/dev/null", "127.0.0.1", str(port)],
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-        )
+    port = VNC_PORT
+    vnc_log = VNC_LOG
     try:
         sock = None
 
@@ -123,9 +142,11 @@ def test_wayvnc_without_ipc(
             # A full FramebufferUpdateRequest needs a screen capture
             sock.sendall(struct.pack(">BBHHHH", 3, 0, 0, 0, width, height))
             assert _recv(sock, 1) == b"\x00", "no FramebufferUpdate"
-        assert vnc.poll() is None, vnc_log.read_text()
-        assert "not supported" not in vnc_log.read_text().lower(), vnc_log.read_text()
         assert proc.poll() is None
     finally:
-        vnc.terminate()
-        vnc.wait(timeout=5)
+        for comm in Path("/proc").glob("[0-9]*/comm"):
+            try:
+                if comm.read_text().strip() == "wayvnc":
+                    os.kill(int(comm.parent.name), 15)
+            except (OSError, ValueError):
+                pass

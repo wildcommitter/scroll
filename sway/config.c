@@ -196,6 +196,7 @@ void free_config(struct sway_config *config) {
 	free(config->floating_scroll_right_cmd);
 	free(config->font);
 	free(config->swaybg_command);
+	free(config->lock_command);
 	free(config->swaynag_command);
 	free((char *)config->current_config_path);
 	free((char *)config->current_config);
@@ -396,6 +397,8 @@ static void config_defaults(struct sway_config *config) {
 	if (!(config->active_bar_modifiers = create_list())) goto cleanup;
 
 	if (!(config->swaybg_command = strdup("swaybg"))) goto cleanup;
+	config->lock_command = NULL;
+	config->privileged_clients = PRIVILEGED_CLIENTS_SPAWNED;
 
 	if (!(config->config_chain = create_list())) goto cleanup;
 	config->current_config_path = NULL;

@@ -69,6 +69,7 @@ static const struct cmd_handler handlers[] = {
 	{ "default_floating_border", cmd_default_floating_border },
 	{ "exec", cmd_exec },
 	{ "exec_always", cmd_exec_always },
+	{ "exec_privileged", cmd_exec_privileged },
 	{ "floating_maximum_size", cmd_floating_maximum_size },
 	{ "floating_minimum_size", cmd_floating_minimum_size },
 	{ "floating_modifier", cmd_floating_modifier },
@@ -143,8 +144,10 @@ static const struct cmd_handler config_handlers[] = {
 	{ "layout_default_width", cmd_layout_default_width },
 	{ "layout_heights", cmd_layout_heights },
 	{ "layout_widths", cmd_layout_widths },
+	{ "lock_command", cmd_lock_command },
 	{ "maximize_if_single", cmd_maximize_if_single },
 	{ "primary_selection", cmd_primary_selection },
+	{ "privileged_clients", cmd_privileged_clients },
 	{ "scratchpad_minimize", cmd_scratchpad_minimize },
 	{ "scrollnag_command", cmd_swaynag_command },
 	{ "snap_border_overlap", cmd_snap_border_overlap },
@@ -181,6 +184,7 @@ static const struct cmd_handler command_handlers[] = {
 	{ "jump", cmd_jump },
 	{ "kill", cmd_kill },
 	{ "layout_transpose", cmd_layout_transpose },
+	{ "lock", cmd_lock },
 	{ "mark", cmd_mark },
 	{ "max_render_time", cmd_max_render_time },
 	{ "move", cmd_move },
@@ -334,6 +338,7 @@ list_t *execute_command(char *_exec, struct sway_seat *seat,
 		char **argv = split_args(cmd, &argc);
 		if (strcmp(argv[0], "exec") != 0 &&
 				strcmp(argv[0], "exec_always") != 0 &&
+				strcmp(argv[0], "exec_privileged") != 0 &&
 				strcmp(argv[0], "mode") != 0) {
 			for (int i = 1; i < argc; ++i) {
 				if (*argv[i] == '\"' || *argv[i] == '\'') {

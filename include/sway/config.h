@@ -550,6 +550,15 @@ struct sway_config {
 	enum sway_popup_during_fullscreen popup_during_fullscreen;
 	enum xwayland_mode xwayland;
 
+	// Who may bind the restricted globals, see sway/privileged.h
+	enum {
+		PRIVILEGED_CLIENTS_SPAWNED,
+		PRIVILEGED_CLIENTS_ALL,
+	} privileged_clients;
+	char *lock_command;
+	// The command being run came in over IPC
+	bool ipc_command;
+
 	// swaybg
 	char *swaybg_command;
 	struct wl_client *swaybg_client;

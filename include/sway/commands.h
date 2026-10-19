@@ -94,6 +94,15 @@ char *cmd_results_to_json(list_t *res_list);
  */
 sway_cmd cmd_exec_validate;
 sway_cmd cmd_exec_process;
+sway_cmd cmd_exec_privileged_process;
+
+/**
+ * Runs cmd through sh -c in a new session. If privileged_client isn't NULL,
+ * the child gets a WAYLAND_SOCKET connection that is a privileged client, and
+ * *privileged_client is set to it. Returns the child pid, or -1.
+ */
+pid_t exec_spawn(const char *cmd, bool no_startup_id,
+	struct wl_client **privileged_client);
 
 sway_cmd cmd_align;
 sway_cmd cmd_align_reset_auto;
@@ -136,6 +145,10 @@ sway_cmd cmd_default_floating_border;
 sway_cmd cmd_default_orientation;
 sway_cmd cmd_exec;
 sway_cmd cmd_exec_always;
+sway_cmd cmd_exec_privileged;
+sway_cmd cmd_lock;
+sway_cmd cmd_lock_command;
+sway_cmd cmd_privileged_clients;
 sway_cmd cmd_exit;
 sway_cmd cmd_filter;
 sway_cmd cmd_fit_size;

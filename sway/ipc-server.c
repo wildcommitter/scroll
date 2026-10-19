@@ -694,7 +694,9 @@ void ipc_client_handle_command(struct ipc_client *client, uint32_t payload_lengt
 			line = strtok(NULL, "\n");
 		}
 
+		config->ipc_command = true;
 		list_t *res_list = execute_command(buf, NULL, NULL);
+		config->ipc_command = false;
 		if (modeset_is_pending()) {
 			// IPC expects commands to have taken immediate effect, so we need
 			// to force a modeset after output commands. We do a single modeset

@@ -310,6 +310,11 @@ The following commands may only be used in the configuration file.
 	and the mode will be given by the type of layout assigned to the output,
 	or its landscape/portrait configuration if none was assigned.
 
+*lock_command* <shell command>
+	Sets the locker that *lock* and SIGUSR1 start, for example
+	_hardened-unlock -f_. It runs with sh and as a privileged client (see
+	*privileged_clients*), so it can use ext-session-lock-v1.
+
 *maximize_if_single* <true|false>
 	Default value is _false_. If _true_, whenever there is a single tiling
 	window in the workspace, it will be maximized, unless you explicitly resize
@@ -321,6 +326,25 @@ The following commands may only be used in the configuration file.
 	able to have windows bigger than the workspace size, for example if you
 	work with a scaled workspace and need bigger windows than the size of the
 	unscaled workspace.
+
+*privileged_clients* spawned|all
+	Selects which Wayland clients can bind the restricted globals: screen
+	capture (screencopy, ext-image-copy-capture, export-dmabuf), clipboard
+	control (wlr and ext data-control), virtual keyboard and pointer,
+	input-method, transient-seat, ext-session-lock, layer-shell, foreign
+	toplevel management and list, workspace management, output management,
+	output power, gamma control and DRM leases. Sandboxed clients (with a
+	security context) never get these, nor xdg-output,
+	keyboard-shortcuts-inhibit and security-context.
+
+	With _spawned_ (the default), only clients that scroll starts itself over
+	WAYLAND_SOCKET get them: swaybg, scrollnag, scrollbar, *exec_privileged*
+	and *lock_command*. Every other client, including programs those clients
+	start, sees none of them. With _all_, every unsandboxed client gets them,
+	as in sway.
+
+	The allowlist only holds when scroll is built with _-Dipc=false_: an IPC
+	client can create a binding that runs *exec_privileged*.
 
 *scratchpad_minimize* <true|false>
 	Default value is _false_. If _true_, minimizing a window through its CSD
@@ -631,6 +655,14 @@ set|plus|minus|toggle <amount>
 ```
 	jump criteria [app_id="firefox"]
 ```
+
+*lock*
+	Locks the session by starting *lock_command*, as SIGUSR1 does. It does
+	nothing while a live locker holds the lock or is still starting. If the
+	lock was abandoned (the locker died), it starts a new locker, which takes
+	over. While the session is locked, abandoned locks included, the file
+	_$XDG_RUNTIME_DIR/scroll-locked.<pid>_ exists; *scroll-lock* waits for it.
+	scroll exports its pid as SCROLL_PID.
 
 *layout_transpose*
 	Allows you to change from one type of layout to the other at runtime. For
@@ -1540,6 +1572,12 @@ The default colors are:
 
 *exec_always* <shell command>
 	Like *exec*, but the shell command will be executed _again_ after *reload*.
+
+*exec_privileged* <shell command>
+	Like *exec*, but the first Wayland connection of the command is a
+	privileged client (see *privileged_clients*). It is passed as
+	WAYLAND_SOCKET, so programs it starts in turn are not privileged. Not
+	allowed over IPC. Example: _exec_privileged wayvnc -u /run/user/1000/vnc_
 
 *floating_maximum_size* <width> x <height>
 	Specifies the maximum size of floating windows. -1 x -1 removes the upper

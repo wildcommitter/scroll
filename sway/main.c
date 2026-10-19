@@ -20,6 +20,7 @@
 #include <wlr/version.h>
 #include "sway/config.h"
 #include "sway/server.h"
+#include "sway/lock.h"
 #include "sway/swaynag.h"
 #include "sway/desktop/transaction.h"
 #include "sway/desktop/animation.h"
@@ -147,6 +148,11 @@ static int term_signal(int signal, void *data) {
 	return 0;
 }
 
+static int lock_signal(int signal, void *data) {
+	sway_session_lock_request();
+	return 0;
+}
+
 static void restore_signals(void) {
 	sigset_t set;
 	sigemptyset(&set);
@@ -182,6 +188,8 @@ void handler(int sig) {
 static void init_signals(void) {
 	wl_event_loop_add_signal(server.wl_event_loop, SIGTERM, term_signal, NULL);
 	wl_event_loop_add_signal(server.wl_event_loop, SIGINT, term_signal, NULL);
+	// Same as the lock command; scroll-lock sends it
+	wl_event_loop_add_signal(server.wl_event_loop, SIGUSR1, lock_signal, NULL);
 
 	struct sigaction sa_ign = { .sa_handler = SIG_IGN };
 	// avoid need to reap children
@@ -393,6 +401,10 @@ int main(int argc, char **argv) {
 	};
 
 	setenv("WAYLAND_DISPLAY", server.socket, true);
+	char pid_str[16];
+	snprintf(pid_str, sizeof(pid_str), "%d", (int)getpid());
+	// scroll-lock signals this pid
+	setenv("SCROLL_PID", pid_str, true);
 	if (!load_main_config(config_path, false, false)) {
 		sway_terminate(EXIT_FAILURE);
 		goto shutdown;

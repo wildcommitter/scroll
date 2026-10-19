@@ -12,6 +12,7 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_swapchain_manager.h>
 #include <xf86drm.h>
+#include "sway/privileged.h"
 #include "sway/config.h"
 #include "sway/desktop/transaction.h"
 #include "sway/input/cursor.h"
@@ -1311,6 +1312,8 @@ static bool _spawn_swaybg(char **command) {
 		sway_log_errno(SWAY_ERROR, "wl_client_create failed");
 		return false;
 	}
+
+	privileged_client_add(config->swaybg_client);
 
 	config->swaybg_client_destroy.notify = handle_swaybg_client_destroy;
 	wl_client_add_destroy_listener(config->swaybg_client,

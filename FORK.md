@@ -37,11 +37,15 @@ maintainer: dawsers has about 760 of the 790 commits from the last year.
 | Switch | Build | Runtime | When it's off |
 |---|---|---|---|
 | Lua API | `-Dlua=disabled` (Lua isn't linked or compiled) | `SCROLL_DISABLE_LUA=1` | `lua`, `lua_eval` and IPC Lua eval return an error and no Lua runs |
+| Privileged protocols | always | `privileged_clients all` (config only) restores sway | Only clients scroll starts over `WAYLAND_SOCKET` (swaybg, scrollnag, scrollbar, `exec_privileged`, `lock_command`) can bind screen capture, virtual input, data-control, input-method, session-lock, layer-shell, toplevel/workspace/output management, gamma and DRM leases. Only holds with `-Dipc=false` |
+| Locking | always | `lock`, SIGUSR1, `scroll-lock` | `lock` starts `lock_command` as a privileged client. `$XDG_RUNTIME_DIR/scroll-locked.$SCROLL_PID` exists while locked; `scroll-lock` signals scroll and waits for it (for swayidle `before-sleep`) |
 | IPC socket | `-Dipc=false` | `SCROLL_DISABLE_IPC=1` | No socket is created, `SWAYSOCK`/`I3SOCK`/`SCROLLSOCK` are unset, and `bar {}` isn't started. scrollmsg, scrollbar and waybar stop working |
 
 The minimal build is `-Dlua=disabled -Dipc=false -Dscrollbar=false`. wayvnc still works,
 because it uses Wayland protocols, not IPC. `tests/test_ipc_disabled.py` checks this with an
-RFB handshake. Most of the pytest suite talks over IPC and Lua, so run it on a default build.
+RFB handshake, with wayvnc started by `exec_privileged`; started outside scroll it gets no
+virtual input. `tests/test_privileged.py` covers the allowlist and locking, using the
+stdlib Wayland client `tests/wl_client.py`. Most of the pytest suite talks over IPC and Lua, so run it on a default build.
 `liblua` can still show up in `ldd` through libinput; scroll itself doesn't link it.
 
 ## How upstream fixes arrive

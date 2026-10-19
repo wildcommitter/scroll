@@ -60,6 +60,7 @@
 #include "sway/input/input-manager.h"
 #include "sway/output.h"
 #include "sway/server.h"
+#include "sway/privileged.h"
 #include "sway/input/cursor.h"
 #include "sway/tree/root.h"
 #include "sway/tree/workspace.h"
@@ -132,6 +133,41 @@ static bool is_privileged(const struct wl_global *global) {
 		global == server.workspace_manager_v1->global;
 }
 
+// Globals only privileged clients can bind, unless "privileged_clients all".
+// is_privileged() minus xdg-output, keyboard-shortcuts-inhibit and
+// security-context, which unprivileged apps need.
+static bool is_restricted(const struct wl_global *global) {
+#if WLR_HAS_DRM_BACKEND
+	if (server.drm_lease_manager != NULL) {
+		struct wlr_drm_lease_device_v1 *drm_lease_dev;
+		wl_list_for_each(drm_lease_dev, &server.drm_lease_manager->devices, link) {
+			if (drm_lease_dev->global == global) {
+				return true;
+			}
+		}
+	}
+#endif
+
+	return
+		global == server.output_manager_v1->global ||
+		global == server.output_power_manager_v1->global ||
+		global == server.input_method->global ||
+		global == server.foreign_toplevel_list->global ||
+		global == server.foreign_toplevel_manager->global ||
+		global == server.wlr_data_control_manager_v1->global ||
+		global == server.ext_data_control_manager_v1->global ||
+		global == server.screencopy_manager_v1->global ||
+		global == server.ext_image_copy_capture_manager_v1->global ||
+		global == server.export_dmabuf_manager_v1->global ||
+		global == server.gamma_control_manager_v1->global ||
+		global == server.layer_shell->global ||
+		global == server.session_lock.manager->global ||
+		global == server.input->virtual_keyboard->global ||
+		global == server.input->virtual_pointer->global ||
+		global == server.input->transient_seat_manager->global ||
+		global == server.workspace_manager_v1->global;
+}
+
 static bool filter_global(const struct wl_client *client,
 		const struct wl_global *global, void *data) {
 #if WLR_HAS_XWAYLAND
@@ -146,8 +182,13 @@ static bool filter_global(const struct wl_client *client,
 	const struct wlr_security_context_v1_state *security_context =
 		wlr_security_context_manager_v1_lookup_client(
 		server.security_context_manager_v1, (struct wl_client *)client);
-	if (is_privileged(global)) {
-		return security_context == NULL;
+	if (is_privileged(global) && security_context != NULL) {
+		return false;
+	}
+
+	if ((!config || config->privileged_clients == PRIVILEGED_CLIENTS_SPAWNED) &&
+			is_restricted(global) && !privileged_client_check(client)) {
+		return false;
 	}
 
 	return true;

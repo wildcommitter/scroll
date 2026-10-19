@@ -228,6 +228,12 @@ install_data(
 )
 
 install_data(
+	'scroll-lock',
+	install_dir: get_option('bindir'),
+	install_mode: 'rwxr-xr-x',
+)
+
+install_data(
 	'scroll.png',
 	install_dir: join_paths(datadir, 'icons')
 )

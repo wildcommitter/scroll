@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "sway/privileged.h"
 #include "sway/log.h"
 #include "sway/server.h"
 #include "sway/swaynag.h"
@@ -54,6 +55,8 @@ bool swaynag_spawn(const char *swaynag_command,
 		sway_log_errno(SWAY_ERROR, "wl_client_create failed");
 		goto failed;
 	}
+
+	privileged_client_add(swaynag->client);
 
 	swaynag->client_destroy.notify = handle_swaynag_client_destroy;
 	wl_client_add_destroy_listener(swaynag->client, &swaynag->client_destroy);

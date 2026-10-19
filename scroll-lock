@@ -1,0 +1,26 @@
+#!/bin/sh
+# scroll-lock: ask the running scroll to lock the session with its
+# lock_command, then wait until the session is locked.
+#
+#   scroll-lock                  # exit 0 once locked, 1 after 10 s
+#
+# Meant for swayidle -w ... before-sleep scroll-lock: suspend waits for the lock.
+set -eu
+
+die() { echo "scroll-lock: $*" >&2; exit 1; }
+
+pid=${SCROLL_PID:-}
+case $pid in
+	'' | *[!0-9]*) die "SCROLL_PID is not set (run me from a scroll session)" ;;
+esac
+dir=${XDG_RUNTIME_DIR:-}
+[ -n "$dir" ] || die "XDG_RUNTIME_DIR is not set"
+state="$dir/scroll-locked.$pid"
+
+kill -USR1 "$pid" || die "cannot signal scroll (pid $pid)"
+i=0
+while [ ! -e "$state" ]; do
+	i=$((i + 1))
+	[ "$i" -le 100 ] || die "the session is not locked after 10 s"
+	sleep 0.1
+done

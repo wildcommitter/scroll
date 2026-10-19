@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <wordexp.h>
+#include "sway/privileged.h"
 #include "sway/config.h"
 #include "sway/ipc-server.h"
 #include "sway/input/keyboard.h"
@@ -213,6 +214,8 @@ static void invoke_swaybar(struct bar_config *bar) {
 		sway_log_errno(SWAY_ERROR, "wl_client_create failed");
 		return;
 	}
+
+	privileged_client_add(bar->client);
 
 	bar->client_destroy.notify = handle_swaybar_client_destroy;
 	wl_client_add_destroy_listener(bar->client, &bar->client_destroy);

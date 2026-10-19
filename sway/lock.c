@@ -1,6 +1,12 @@
 #include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_scene.h>
+#include "sway/commands.h"
+#include "sway/config.h"
 #include "sway/log.h"
 #include "sway/input/cursor.h"
 #include "sway/input/keyboard.h"
@@ -10,6 +16,39 @@
 #include "sway/server.h"
 #include "sway/lock.h"
 #include "sway/desktop/transaction.h"
+#include "stringop.h"
+
+// The locker started by sway_session_lock_request, until it disconnects
+static struct wl_client *locker_client = NULL;
+static struct wl_listener locker_client_destroy;
+
+// $XDG_RUNTIME_DIR/scroll-locked.<pid> exists while the session is locked,
+// abandoned locks included. scroll-lock waits for it.
+static char *lock_state_path(void) {
+	const char *dir = getenv("XDG_RUNTIME_DIR");
+	if (!dir || dir[0] != '/') {
+		return NULL;
+	}
+	return format_str("%s/scroll-locked.%d", dir, (int)getpid());
+}
+
+static void lock_state_set(bool locked) {
+	char *path = lock_state_path();
+	if (!path) {
+		return;
+	}
+	if (locked) {
+		int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0600);
+		if (fd < 0) {
+			sway_log_errno(SWAY_ERROR, "Unable to create %s", path);
+		} else {
+			close(fd);
+		}
+	} else if (unlink(path) != 0 && errno != ENOENT) {
+		sway_log_errno(SWAY_ERROR, "Unable to remove %s", path);
+	}
+	free(path);
+}
 
 struct sway_session_lock_output {
 	struct wlr_scene_tree *tree;
@@ -217,6 +256,7 @@ static void handle_unlock(struct wl_listener *listener, void *data) {
 	sway_log(SWAY_DEBUG, "session unlocked");
 
 	sway_session_lock_destroy(lock);
+	lock_state_set(false);
 
 	struct sway_seat *seat;
 	wl_list_for_each(seat, &server.input->seats, link) {
@@ -303,6 +343,7 @@ static void handle_session_lock(struct wl_listener *listener, void *data) {
 
 	wlr_session_lock_v1_send_locked(lock);
 	server.session_lock.lock = sway_lock;
+	lock_state_set(true);
 
 	// The lock screen covers everything, so check if any active inhibition got
 	// deactivated due to lost visibility.
@@ -315,10 +356,48 @@ static void handle_session_lock_destroy(struct wl_listener *listener, void *data
 		sway_session_lock_destroy(server.session_lock.lock);
 	}
 
+	lock_state_set(false);
+
 	wl_list_remove(&server.session_lock.new_lock.link);
 	wl_list_remove(&server.session_lock.manager_destroy.link);
 
 	server.session_lock.manager = NULL;
+}
+
+static void handle_locker_client_destroy(struct wl_listener *listener, void *data) {
+	wl_list_remove(&locker_client_destroy.link);
+	locker_client = NULL;
+}
+
+bool sway_session_lock_request(void) {
+	struct sway_session_lock *lock = server.session_lock.lock;
+	if (lock && !lock->abandoned) {
+		sway_log(SWAY_DEBUG, "Lock requested, but the session is already locked");
+		return true;
+	}
+	if (!lock && locker_client) {
+		sway_log(SWAY_DEBUG, "Lock requested, but the locker is still starting");
+		return true;
+	}
+	if (!config->lock_command) {
+		sway_log(SWAY_ERROR, "Lock requested, but no lock_command is configured");
+		return false;
+	}
+	if (locker_client) {
+		// The old locker abandoned the lock but kept its connection
+		wl_list_remove(&locker_client_destroy.link);
+		locker_client = NULL;
+	}
+	struct wl_client *client = NULL;
+	if (exec_spawn(config->lock_command, true, &client) < 0 || !client) {
+		sway_log(SWAY_ERROR, "Unable to start the locker '%s'", config->lock_command);
+		return false;
+	}
+	locker_client = client;
+	locker_client_destroy.notify = handle_locker_client_destroy;
+	wl_client_add_destroy_listener(client, &locker_client_destroy);
+	sway_log(SWAY_INFO, "Started the locker '%s'", config->lock_command);
+	return true;
 }
 
 void sway_session_lock_add_output(struct sway_session_lock *lock,
@@ -348,6 +427,9 @@ bool sway_session_lock_has_surface(struct sway_session_lock *lock,
 }
 
 bool sway_session_lock_init(void) {
+	// A stale file from an earlier scroll with our pid
+	lock_state_set(false);
+
 	server.session_lock.manager = wlr_session_lock_manager_v1_create(server.wl_display);
 	if (!server.session_lock.manager) {
 		sway_log(SWAY_ERROR, "Failed to create session lock manager");
