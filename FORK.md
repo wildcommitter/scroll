@@ -37,12 +37,18 @@ maintainer: dawsers has about 760 of the 790 commits from the last year.
 | Switch | Build | Runtime | When it's off |
 |---|---|---|---|
 | Lua API | `-Dlua=disabled` (Lua isn't linked or compiled) | `SCROLL_DISABLE_LUA=1` | `lua`, `lua_eval` and IPC Lua eval return an error and no Lua runs |
-| IPC socket | `-Dipc=false` | `SCROLL_DISABLE_IPC=1` | No socket is created, `SWAYSOCK`/`I3SOCK`/`SCROLLSOCK` are unset, and `bar {}` isn't started. scrollmsg, scrollbar and waybar stop working |
+| IPC socket | `-Dipc=false` (the socket, read and command-dispatch code is compiled out; scrollmsg isn't built) | `SCROLL_DISABLE_IPC=1` | No socket is created, `SWAYSOCK`/`I3SOCK`/`SCROLLSOCK` are unset, and `bar {}` isn't started. scrollmsg, scrollbar and waybar stop working |
 
 The minimal build is `-Dlua=disabled -Dipc=false -Dscrollbar=false`. wayvnc still works,
 because it uses Wayland protocols, not IPC. `tests/test_ipc_disabled.py` checks this with an
 RFB handshake. Most of the pytest suite talks over IPC and Lua, so run it on a default build.
 `liblua` can still show up in `ldd` through libinput; scroll itself doesn't link it.
+
+CI (`.github/workflows/ci.yml`, Fedora 44) runs on push, PRs and weekly. It runs the full
+ASan suite on the default build, then builds the minimal image configuration (plus
+`-Dwlroots:xwayland=disabled -Dwlroots:renderers=gles2 -Dwlroots:backends=drm,libinput`).
+It tests that build with wayvnc and checks with nm that IPC, Lua, Xwayland and Vulkan are
+gone. The weekly run's summary lists the upstream commits and chases this branch is missing.
 
 ## How upstream fixes arrive
 
