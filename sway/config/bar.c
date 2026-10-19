@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <wordexp.h>
 #include "sway/config.h"
+#include "sway/ipc-server.h"
 #include "sway/input/keyboard.h"
 #include "sway/output.h"
 #include "sway/server.h"
@@ -249,6 +250,10 @@ static void invoke_swaybar(struct bar_config *bar) {
 void load_swaybar(struct bar_config *bar) {
 	if (bar->client != NULL) {
 		wl_client_destroy(bar->client);
+	}
+	if (!ipc_enabled()) {
+		sway_log(SWAY_ERROR, "IPC is disabled, not starting scrollbar for bar id '%s'", bar->id);
+		return;
 	}
 	sway_log(SWAY_DEBUG, "Invoking scrollbar for bar id '%s'", bar->id);
 	invoke_swaybar(bar);

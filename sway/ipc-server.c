@@ -70,8 +70,12 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	if (ipc_event_source) {
 		wl_event_source_remove(ipc_event_source);
 	}
-	close(ipc_socket);
-	unlink(ipc_sockaddr->sun_path);
+	if (ipc_socket != -1) {
+		close(ipc_socket);
+	}
+	if (ipc_sockaddr) {
+		unlink(ipc_sockaddr->sun_path);
+	}
 
 	while (ipc_client_list->length) {
 		ipc_client_disconnect(ipc_client_list->items[ipc_client_list->length-1]);
@@ -83,7 +87,30 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&ipc_display_destroy.link);
 }
 
+bool ipc_enabled(void) {
+#if HAVE_IPC
+	const char *env = getenv("SCROLL_DISABLE_IPC");
+	return !env || env[0] == '\0' || strcmp(env, "0") == 0;
+#else
+	return false;
+#endif
+}
+
 void ipc_init(struct sway_server *server) {
+	ipc_client_list = create_list();
+
+	ipc_display_destroy.notify = handle_display_destroy;
+	wl_display_add_destroy_listener(server->wl_display, &ipc_display_destroy);
+
+	if (!ipc_enabled()) {
+		sway_log(SWAY_INFO, "IPC disabled, not creating the IPC socket");
+		// Children must not find another instance's socket
+		unsetenv("I3SOCK");
+		unsetenv("SWAYSOCK");
+		unsetenv("SCROLLSOCK");
+		return;
+	}
+
 	ipc_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (ipc_socket == -1) {
 		sway_abort("Unable to create IPC socket");
@@ -116,11 +143,6 @@ void ipc_init(struct sway_server *server) {
 	setenv("I3SOCK", ipc_sockaddr->sun_path, 1);
 	setenv("SWAYSOCK", ipc_sockaddr->sun_path, 1);
 	setenv("SCROLLSOCK", ipc_sockaddr->sun_path, 1);
-
-	ipc_client_list = create_list();
-
-	ipc_display_destroy.notify = handle_display_destroy;
-	wl_display_add_destroy_listener(server->wl_display, &ipc_display_destroy);
 
 	ipc_event_source = wl_event_loop_add_fd(server->wl_event_loop, ipc_socket,
 			WL_EVENT_READABLE, ipc_handle_connection, server);

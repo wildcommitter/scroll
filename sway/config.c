@@ -162,6 +162,7 @@ void free_config(struct sway_config *config) {
 		list_free(config->criteria);
 	}
 
+#if HAVE_LUA
 	list_free_items_and_destroy(config->lua.cbs_view_map);
 	list_free_items_and_destroy(config->lua.cbs_view_unmap);
 	list_free_items_and_destroy(config->lua.cbs_view_urgent);
@@ -180,6 +181,7 @@ void free_config(struct sway_config *config) {
 	}
 	list_free_items_and_destroy(config->lua.scripts);
 	lua_close(config->lua.state);
+#endif
 
 	list_free_items_and_destroy(config->layout_widths);
 	list_free_items_and_destroy(config->layout_heights);
@@ -303,6 +305,7 @@ static void config_defaults(struct sway_config *config) {
 	config->gesture_scroll_sentitivity = 1.0f;
 	config->gesture_scroll_sentitivity_mouse = 1.0f;
 
+#if HAVE_LUA
 	if (!(config->lua.state = luaL_newstate())) goto cleanup;
 	if (!(config->lua.scripts = create_list())) goto cleanup;
 	if (!(config->lua.cbs_view_map = create_list())) goto cleanup;
@@ -320,6 +323,7 @@ static void config_defaults(struct sway_config *config) {
 	luaL_openlibs(config->lua.state);
 	luaL_requiref(config->lua.state, "scroll", luaopen_scroll, 1);
 	lua_pop(config->lua.state, 1);
+#endif
 
 	if (!(config->input_type_configs = create_list())) goto cleanup;
 	if (!(config->input_configs = create_list())) goto cleanup;

@@ -3,6 +3,9 @@
 #include <wordexp.h>
 #include "sway/commands.h"
 #include "sway/log.h"
+#include "sway/lua.h"
+
+#if HAVE_LUA
 
 static struct sway_lua_script *find_or_create_script(list_t *scripts, const char *name) {
 	for (int i = 0; i < scripts->length; ++i) {
@@ -29,6 +32,9 @@ static struct sway_lua_script *find_or_create_script(list_t *scripts, const char
 
 struct cmd_results *cmd_lua(int argc, char **argv) {
 	struct cmd_results *error = NULL;
+	if (!lua_enabled()) {
+		return cmd_results_new(CMD_FAILURE, LUA_DISABLED_ERROR);
+	}
 	if ((error = checkarg(argc, "lua", EXPECTED_AT_LEAST, 1))) {
 		return error;
 	}
@@ -147,6 +153,9 @@ finish:
 
 struct cmd_results *cmd_lua_eval(int argc, char **argv) {
 	struct cmd_results *error = NULL;
+	if (!lua_enabled()) {
+		return cmd_results_new(CMD_FAILURE, LUA_DISABLED_ERROR);
+	}
 	if ((error = checkarg(argc, "lua_eval", EXPECTED_AT_LEAST, 2))) {
 		return error;
 	}
@@ -202,3 +211,15 @@ cleanup:
 	config->lua.context_container = old_context_container;
 	return res;
 }
+
+#else
+
+struct cmd_results *cmd_lua(int argc, char **argv) {
+	return cmd_results_new(CMD_FAILURE, LUA_DISABLED_ERROR);
+}
+
+struct cmd_results *cmd_lua_eval(int argc, char **argv) {
+	return cmd_results_new(CMD_FAILURE, LUA_DISABLED_ERROR);
+}
+
+#endif

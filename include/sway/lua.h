@@ -1,10 +1,22 @@
 #ifndef _SWAY_LUA_H
 #define _SWAY_LUA_H
 
+#include <stdbool.h>
+#include <json.h>
+
+struct sway_view;
+struct sway_container;
+struct sway_workspace;
+
+// Error returned by the Lua entry points when Lua is disabled
+#define LUA_DISABLED_ERROR \
+	"Lua is disabled (built with -Dlua=disabled or SCROLL_DISABLE_LUA is set)"
+
+#if HAVE_LUA
+
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
-#include <json.h>
 
 #include "list.h"
 
@@ -50,9 +62,8 @@ json_object *lua_eval(const char *buf);
 // Takes whatever Lua object is top of the stack and assigns it to command_data
 void lua_command_data_create();
 
-struct sway_view;
-struct sway_container;
-struct sway_workspace;
+// False when SCROLL_DISABLE_LUA is set to anything but "" or "0". Read once.
+bool lua_enabled(void);
 
 void lua_execute_view_map_cbs(struct sway_view *view);
 void lua_execute_view_unmap_cbs(struct sway_view *view);
@@ -65,5 +76,32 @@ void lua_execute_ipc_view_cbs(struct sway_view *view, const char *change);
 void lua_execute_ipc_workspace_cbs(struct sway_workspace *old_ws,
 	struct sway_workspace *new_ws, const char *change);
 void lua_execute_jump_end_cbs(struct sway_container *container);
+
+#else
+
+static inline bool lua_enabled(void) {
+	return false;
+}
+
+static inline json_object *lua_eval(const char *buf) {
+	json_object *obj = json_object_new_object();
+	json_object_object_add(obj, "success", json_object_new_boolean(false));
+	json_object_object_add(obj, "error", json_object_new_string(LUA_DISABLED_ERROR));
+	return obj;
+}
+
+static inline void lua_execute_view_map_cbs(struct sway_view *view) {}
+static inline void lua_execute_view_unmap_cbs(struct sway_view *view) {}
+static inline void lua_execute_view_urgent_cbs(struct sway_view *view) {}
+static inline void lua_execute_view_focus_cbs(struct sway_view *view) {}
+static inline void lua_execute_view_float_cbs(struct sway_view *view) {}
+static inline void lua_execute_workspace_create_cbs(struct sway_workspace *workspace) {}
+static inline void lua_execute_workspace_focus_cbs(struct sway_workspace *workspace) {}
+static inline void lua_execute_ipc_view_cbs(struct sway_view *view, const char *change) {}
+static inline void lua_execute_ipc_workspace_cbs(struct sway_workspace *old_ws,
+	struct sway_workspace *new_ws, const char *change) {}
+static inline void lua_execute_jump_end_cbs(struct sway_container *container) {}
+
+#endif
 
 #endif

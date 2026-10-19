@@ -1,8 +1,9 @@
 # Fork notes (wildcommitter/scroll)
 
 A downstream fork of [dawsers/scroll](https://github.com/dawsers/scroll), consumed pinned by
-the scroll-secure image (`image/Containerfile`: `SCROLL_REF`/`SCROLL_COMMIT`). It carries no
-patches of its own. Sync it from `upstream` and don't develop on `master`.
+the scroll-secure image (`image/Containerfile`: `SCROLL_REF`/`SCROLL_COMMIT`). `master`
+tracks upstream plus this file. Hardening patches live on `hardening` (see below), which
+is rebased onto upstream.
 
 ```sh
 git remote add upstream https://github.com/dawsers/scroll.git
@@ -30,6 +31,18 @@ maintainer: dawsers has about 760 of the 790 commits from the last year.
 | `subprojects/wlroots/` | **A full copy of wlroots 0.21-dev, modified in-tree** (not a wrap) | Linked statically. Distro wlroots updates never reach it |
 | `tests/` | pytest plus Wayland and X11 test clients, built with ASan | Many regression tests for use-after-free and crashes |
 | `swaybar/`, `swaynag/`, `client/`, `common/` | Same as sway | |
+
+## Hardening patches (`hardening` branch)
+
+| Switch | Build | Runtime | When it's off |
+|---|---|---|---|
+| Lua API | `-Dlua=disabled` (Lua isn't linked or compiled) | `SCROLL_DISABLE_LUA=1` | `lua`, `lua_eval` and IPC Lua eval return an error and no Lua runs |
+| IPC socket | `-Dipc=false` | `SCROLL_DISABLE_IPC=1` | No socket is created, `SWAYSOCK`/`I3SOCK`/`SCROLLSOCK` are unset, and `bar {}` isn't started. scrollmsg, scrollbar and waybar stop working |
+
+The minimal build is `-Dlua=disabled -Dipc=false -Dscrollbar=false`. wayvnc still works,
+because it uses Wayland protocols, not IPC. `tests/test_ipc_disabled.py` checks this with an
+RFB handshake. Most of the pytest suite talks over IPC and Lua, so run it on a default build.
+`liblua` can still show up in `ldd` through libinput; scroll itself doesn't link it.
 
 ## How upstream fixes arrive
 

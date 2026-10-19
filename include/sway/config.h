@@ -664,7 +664,9 @@ struct sway_config {
 		float shadow_color[4];
 	} decoration;
 
+#if HAVE_LUA
 	struct sway_lua lua;
+#endif
 
 	// floating view
 	int32_t floating_maximum_width;

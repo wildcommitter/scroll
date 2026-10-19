@@ -7,7 +7,6 @@ sway_sources = files(
 	'ipc-server.c',
 	'lock.c',
 	'log.c',
-	'lua.c',
 	'main.c',
 	'realtime.c',
 	'scene_descriptor.c',
@@ -274,6 +273,10 @@ sway_deps = [
 	xcb_icccm,
 	lua,
 ]
+
+if lua.found()
+	sway_sources += 'lua.c'
+endif
 
 if wlroots_features['xwayland']
 	sway_sources += 'desktop/xwayland.c'

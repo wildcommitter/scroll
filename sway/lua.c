@@ -1,4 +1,6 @@
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <json.h>
@@ -2223,8 +2225,25 @@ static void execute_buffer(json_object *obj, const char *buf) {
 	}
 }
 
+bool lua_enabled(void) {
+	static int enabled = -1;
+	if (enabled < 0) {
+		const char *env = getenv("SCROLL_DISABLE_LUA");
+		enabled = !env || env[0] == '\0' || strcmp(env, "0") == 0;
+		if (!enabled) {
+			sway_log(SWAY_INFO, "Lua disabled by SCROLL_DISABLE_LUA");
+		}
+	}
+	return enabled;
+}
+
 json_object *lua_eval(const char *buf) {
 	json_object *obj = json_object_new_object();
+	if (!lua_enabled()) {
+		json_object_object_add(obj, "success", json_object_new_boolean(false));
+		json_object_object_add(obj, "error", json_object_new_string(LUA_DISABLED_ERROR));
+		return obj;
+	}
 	char *buffer = format_str("return %s", buf);
 	int err = luaL_loadbuffer(config->lua.state, buffer, strlen(buffer), NULL);
 	if (err == LUA_OK) {

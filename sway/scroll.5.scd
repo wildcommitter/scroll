@@ -2099,6 +2099,11 @@ scroll provides a Lua API to enable scripting of the window manager. You can
 access properties of the window manager, execute commands or add callbacks to
 window and workspace events.
 
+The API is optional. Build with *-Dlua=disabled* to leave it out, or set
+*SCROLL_DISABLE_LUA* to a value other than "" or "0" in the environment of
+scroll to turn it off at runtime. When it is off, *lua*, *lua_eval* and IPC Lua
+evaluation fail with an error, and no Lua code runs.
+
 Lua scripts are a powerful way to customize scroll, but if you are not careful,
 you can also make the compositor crash. The best way to debug a script before
 running it in your main environment is to run it in a "nested" instance of

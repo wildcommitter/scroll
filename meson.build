@@ -81,7 +81,10 @@ math = cc.find_library('m')
 rt = cc.find_library('rt')
 xcb_icccm = wlroots_features['xwayland'] ? dependency('xcb-icccm') : null_dep
 threads = dependency('threads') # for pthread_setschedparam and pthread_atfork
-lua = dependency('lua', version: '>=5.4')
+lua = dependency('lua', version: '>=5.4', required: get_option('lua'))
+add_project_arguments('-DHAVE_IPC=@0@'.format(get_option('ipc') ? 1 : 0), language: 'c')
+# A compiler define, not conf_data: include/sway/lua.h can't reach the generated config.h
+add_project_arguments('-DHAVE_LUA=@0@'.format(lua.found() ? 1 : 0), language: 'c')
 
 if get_option('sd-bus-provider') == 'auto'
 	if not get_option('tray').disabled()
@@ -251,5 +254,7 @@ subdir('tests')
 summary({
 	'gdk-pixbuf': gdk_pixbuf.found(),
 	'tray': have_tray,
+	'lua': lua.found(),
+	'ipc': get_option('ipc'),
 	'man-pages': scdoc.found(),
 }, bool_yn: true)

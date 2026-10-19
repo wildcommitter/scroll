@@ -12,6 +12,10 @@ struct sway_server;
 
 void ipc_init(struct sway_server *server);
 
+// False when built with -Dipc=false, or SCROLL_DISABLE_IPC is set to anything
+// but "" or "0". Then no IPC socket exists.
+bool ipc_enabled(void);
+
 struct sockaddr_un *ipc_user_sockaddr(void);
 
 void ipc_event_workspace(struct sway_workspace *old,
