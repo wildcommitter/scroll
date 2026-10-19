@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include "sway/privileged.h"
+#include "sway/spawn.h"
 #include "sway/log.h"
 #include "sway/server.h"
 #include "sway/swaynag.h"
@@ -61,32 +62,23 @@ bool swaynag_spawn(const char *swaynag_command,
 	swaynag->client_destroy.notify = handle_swaynag_client_destroy;
 	wl_client_add_destroy_listener(swaynag->client, &swaynag->client_destroy);
 
-	pid_t pid = fork();
-	if (pid < 0) {
-		sway_log(SWAY_ERROR, "Failed to create fork for scrollnag");
+	size_t length = strlen(swaynag_command) + strlen(swaynag->args) + 2;
+	char *cmd = malloc(length);
+	if (!cmd) {
+		close(sockets[1]);
 		goto failed;
-	} else if (pid == 0) {
-		if (!sway_set_cloexec(sockets[1], false)) {
-			_exit(EXIT_FAILURE);
-		}
-
-		if (swaynag->detailed) {
-			close(swaynag->fd[1]);
-			dup2(swaynag->fd[0], STDIN_FILENO);
-			close(swaynag->fd[0]);
-		}
-
-		char wayland_socket_str[16];
-		snprintf(wayland_socket_str, sizeof(wayland_socket_str),
-				"%d", sockets[1]);
-		setenv("WAYLAND_SOCKET", wayland_socket_str, true);
-
-		size_t length = strlen(swaynag_command) + strlen(swaynag->args) + 2;
-		char *cmd = malloc(length);
-		snprintf(cmd, length, "%s %s", swaynag_command, swaynag->args);
-		execlp("sh", "sh", "-c", cmd, NULL);
-		sway_log_errno(SWAY_ERROR, "execlp failed");
-		_exit(EXIT_FAILURE);
+	}
+	snprintf(cmd, length, "%s %s", swaynag_command, swaynag->args);
+	struct spawn_options opts = {
+		.wayland_fd = sockets[1],
+		.stdin_fd = swaynag->detailed ? swaynag->fd[0] : -1,
+	};
+	pid_t pid = spawn_shell(cmd, &opts);
+	free(cmd);
+	if (pid < 0) {
+		sway_log(SWAY_ERROR, "Failed to spawn scrollnag");
+		close(sockets[1]);
+		goto failed;
 	}
 
 	if (swaynag->detailed) {

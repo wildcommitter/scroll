@@ -150,3 +150,26 @@ def test_wayvnc_without_ipc(
                     os.kill(int(comm.parent.name), 15)
             except (OSError, ValueError):
                 pass
+
+
+def _status(path: str, field: str) -> str:
+    with open(path) as f:
+        for line in f:
+            if line.startswith(field + ":"):
+                return line.split()[1]
+    raise AssertionError(f"{field} missing from {path}")
+
+
+def test_no_ipc_sandbox(
+    no_ipc_compositor: tuple[subprocess.Popen, Path, dict], tmp_path: Path
+) -> None:
+    proc, _, _ = no_ipc_compositor
+    log = tmp_path / "scroll.log"
+    # Applied right before the event loop, after the fixture saw "IPC disabled"
+    if not _wait(lambda: "sandbox: seccomp filter applied" in log.read_text(), 3):
+        pytest.skip("not a -Dsandbox=true build")
+    # Containers stack their own filter: compare with this process
+    mine = int(_status("/proc/self/status", "Seccomp_filters"))
+    assert int(_status(f"/proc/{proc.pid}/status", "Seccomp_filters")) == mine + 1
+    assert _status(f"/proc/{proc.pid}/status", "NoNewPrivs") == "1"
+    assert proc.poll() is None

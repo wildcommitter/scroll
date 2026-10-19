@@ -198,7 +198,8 @@ def test_lua_load_nonexistent_script(scroll_compositor: ScrollInstance) -> None:
 def test_lua_load_syntax_error(
     scroll_compositor: ScrollInstance, tmp_path: Path
 ) -> None:
-    script: Path = tmp_path / "syntax_error.lua"
+    # In the config dir: a -Dsandbox=true build can only read scripts there
+    script: Path = scroll_compositor.temp_dir / "syntax_error.lua"
     script.write_text("this is not valid lua code")
     res = scroll_compositor.cmd(f"lua {script}")
     assert res and not res[0]["success"]
@@ -209,7 +210,8 @@ def test_lua_load_syntax_error(
 def test_lua_runtime_error_top_level(
     scroll_compositor: ScrollInstance, tmp_path: Path
 ) -> None:
-    script: Path = tmp_path / "runtime_error.lua"
+    # In the config dir: a -Dsandbox=true build can only read scripts there
+    script: Path = scroll_compositor.temp_dir / "runtime_error.lua"
     script.write_text("error('top level error')")
     res = scroll_compositor.cmd(f"lua {script}")
     assert res and not res[0]["success"]

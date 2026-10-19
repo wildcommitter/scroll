@@ -12,6 +12,7 @@
 #include "sway/privileged.h"
 #include "sway/config.h"
 #include "sway/ipc-server.h"
+#include "sway/spawn.h"
 #include "sway/input/keyboard.h"
 #include "sway/output.h"
 #include "sway/server.h"
@@ -220,26 +221,15 @@ static void invoke_swaybar(struct bar_config *bar) {
 	bar->client_destroy.notify = handle_swaybar_client_destroy;
 	wl_client_add_destroy_listener(bar->client, &bar->client_destroy);
 
-	pid_t pid = fork();
-	if (pid < 0) {
-		sway_log(SWAY_ERROR, "Failed to create fork for scrollbar");
+	// run custom swaybar
+	char *const cmd[] = {
+			bar->swaybar_command ? bar->swaybar_command : "scrollbar",
+			"-b", bar->id, NULL};
+	struct spawn_options opts = { .wayland_fd = sockets[1], .stdin_fd = -1 };
+	if (spawn_argv(cmd, &opts) < 0) {
+		sway_log(SWAY_ERROR, "Failed to spawn scrollbar");
+		close(sockets[1]);
 		return;
-	} else if (pid == 0) {
-		if (!sway_set_cloexec(sockets[1], false)) {
-			_exit(EXIT_FAILURE);
-		}
-
-		char wayland_socket_str[16];
-		snprintf(wayland_socket_str, sizeof(wayland_socket_str),
-				"%d", sockets[1]);
-		setenv("WAYLAND_SOCKET", wayland_socket_str, true);
-
-		// run custom swaybar
-		char *const cmd[] = {
-				bar->swaybar_command ? bar->swaybar_command : "scrollbar",
-				"-b", bar->id, NULL};
-		execvp(cmd[0], cmd);
-		_exit(EXIT_FAILURE);
 	}
 
 	if (close(sockets[1]) != 0) {

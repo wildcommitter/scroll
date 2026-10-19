@@ -15,6 +15,7 @@
 #include "sway/tree/workspace.h"
 #include "sway/log.h"
 #include "sway/privileged.h"
+#include "sway/spawn.h"
 #include "stringop.h"
 #include "util.h"
 
@@ -58,43 +59,44 @@ pid_t exec_spawn(const char *cmd, bool no_startup_id,
 
 	struct launcher_ctx *ctx = launcher_ctx_create_internal();
 
-	// Fork process
-	pid_t child = fork();
-	if (child == 0) {
-		setsid();
-
-		if (ctx) {
-			const char *token = launcher_ctx_get_token_name(ctx);
-			setenv("XDG_ACTIVATION_TOKEN", token, 1);
-			if (!no_startup_id) {
-				setenv("DESKTOP_STARTUP_ID", token, 1);
+	char *token_env = NULL, *startup_env = NULL;
+	const char *env[3] = { NULL };
+	int nenv = 0;
+	if (ctx) {
+		const char *token = launcher_ctx_get_token_name(ctx);
+		token_env = format_str("XDG_ACTIVATION_TOKEN=%s", token);
+		if (token_env) {
+			env[nenv++] = token_env;
+		}
+		if (!no_startup_id) {
+			startup_env = format_str("DESKTOP_STARTUP_ID=%s", token);
+			if (startup_env) {
+				env[nenv++] = startup_env;
 			}
 		}
+	}
 
-		if (client) {
-			if (!sway_set_cloexec(sockets[1], false)) {
-				_exit(EXIT_FAILURE);
-			}
-			char wayland_socket_str[16];
-			snprintf(wayland_socket_str, sizeof(wayland_socket_str),
-				"%d", sockets[1]);
-			setenv("WAYLAND_SOCKET", wayland_socket_str, true);
-		}
-
-		execlp("sh", "sh", "-c", cmd, (void*)NULL);
-		sway_log_errno(SWAY_ERROR, "execve failed");
-		_exit(0); // Close child process
-	} else if (child < 0) {
+	struct spawn_options opts = {
+		.setsid = true,
+		.wayland_fd = client ? sockets[1] : -1,
+		.stdin_fd = -1,
+		.env = env,
+	};
+	pid_t child = spawn_shell(cmd, &opts);
+	free(token_env);
+	free(startup_env);
+	if (client) {
+		close(sockets[1]);
+	}
+	if (child < 0) {
 		launcher_ctx_destroy(ctx);
 		if (client) {
 			wl_client_destroy(client);
-			close(sockets[1]);
 		}
 		return -1;
 	}
 
 	if (client) {
-		close(sockets[1]);
 		*privileged_client = client;
 	}
 

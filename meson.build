@@ -58,6 +58,11 @@ foreach name, _ : wlroots_features
 	wlroots_features += { name: have }
 endforeach
 
+if get_option('sandbox') and wlroots_features['xwayland']
+	error('-Dsandbox=true needs -Dwlroots:xwayland=disabled: wlroots execs Xwayland itself, which the sandbox forbids')
+endif
+add_project_arguments('-DHAVE_SANDBOX=@0@'.format(get_option('sandbox') ? 1 : 0), language: 'c')
+
 null_dep = dependency('', required: false)
 
 jsonc = dependency('json-c', version: '>=0.13')
@@ -267,5 +272,6 @@ summary({
 	'tray': have_tray,
 	'lua': lua.found(),
 	'ipc': get_option('ipc'),
+	'sandbox': get_option('sandbox'),
 	'man-pages': scdoc.found(),
 }, bool_yn: true)

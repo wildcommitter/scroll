@@ -12,6 +12,7 @@ sway_sources = files(
 	'realtime.c',
 	'scene_descriptor.c',
 	'server.c',
+	'spawn.c',
 	'sway_text_node.c',
 	'swaynag.c',
 	'xdg_activation_v1.c',
@@ -277,6 +278,10 @@ sway_deps = [
 	xcb_icccm,
 	lua,
 ]
+
+if get_option('sandbox')
+	sway_sources += 'sandbox.c'
+endif
 
 if lua.found()
 	sway_sources += 'lua.c'

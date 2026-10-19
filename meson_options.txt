@@ -6,6 +6,7 @@ option('scrollbar', type: 'boolean', value: true, description: 'Enable support f
 option('scrollnag', type: 'boolean', value: true, description: 'Enable support for scrollnag')
 option('tray', type: 'feature', value: 'auto', description: 'Enable support for scrollbar tray')
 option('gdk-pixbuf', type: 'feature', value: 'auto', description: 'Enable support for more image formats in scrollbar tray')
+option('sandbox', type: 'boolean', value: false, description: 'Run the compositor under seccomp and Landlock, with exec done by a broker')
 option('ipc', type: 'boolean', value: true, description: 'Enable the IPC socket (scrollmsg, scrollbar)')
 option('lua', type: 'feature', value: 'auto', description: 'Enable the Lua scripting API')
 option('man-pages', type: 'feature', value: 'auto', description: 'Generate and install man pages')

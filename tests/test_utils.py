@@ -211,7 +211,10 @@ class ScrollCompositorContextManager:
 
 @contextmanager
 def run_compositor(
-    binary_path: str, temp_dir: Path, config_content: str | None = None
+    binary_path: str,
+    temp_dir: Path,
+    config_content: str | None = None,
+    home: Path | None = None,
 ) -> Generator[ScrollInstance, None, None]:
     log_path: Path = temp_dir / "scroll.log"
     log_file = open(log_path, "w")
@@ -222,7 +225,7 @@ def run_compositor(
     config_path.write_text(config_content)
 
     env = os.environ.copy()
-    env["HOME"] = str(temp_dir)
+    env["HOME"] = str(home if home is not None else temp_dir)
     env["WLR_BACKENDS"] = "headless"
 
     tests_dir = Path(__file__).parent.resolve()

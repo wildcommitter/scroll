@@ -1,5 +1,6 @@
 # Build and test the fork in Fedora 44: the full ASan pytest suite on the
-# default build, and the hardened minimal build that scroll-secure ships.
+# default and -Dsandbox=true builds, and the hardened minimal build that
+# scroll-secure ships (no IPC, no Lua, sandboxed).
 # A weekly run also reports how far upstream has moved past this branch.
 name: ci
 
@@ -26,7 +27,8 @@ jobs:
       MINIMAL: >-
         -Dlua=disabled -Dipc=false -Dscrollbar=false
         -Dwlroots:xwayland=disabled -Dwlroots:renderers=gles2
-        -Dwlroots:backends=drm,libinput
+        -Dwlroots:backends=drm,libinput -Dsandbox=true
+      SANDBOX: -Dsandbox=true -Dwlroots:xwayland=disabled
     steps:
       - name: Install dependencies
         run: |
@@ -44,11 +46,22 @@ jobs:
         run: |
           mkdir -m 0700 -p "$XDG_RUNTIME_DIR"
           python3 -m pytest -p no:cacheprovider -q -n 4 tests --scroll build/sway/scroll
+      - name: Build (sandbox)
+        run: |
+          meson setup build-sandbox $COMMON $SANDBOX
+          ninja -C build-sandbox
+      - name: Test (sandbox, full suite)
+        run: |
+          mkdir -m 0700 -p "$XDG_RUNTIME_DIR"
+          mkdir -p /tmp/sandbox && ln -sfn "$PWD/build-sandbox" /tmp/sandbox/build
+          cd /tmp/sandbox
+          python3 -m pytest -p no:cacheprovider -q -rs -n 4 "$GITHUB_WORKSPACE/tests" \
+            --scroll "$GITHUB_WORKSPACE/build-sandbox/sway/scroll"
       - name: Build (minimal)
         run: |
           meson setup build-minimal $COMMON $MINIMAL
           ninja -C build-minimal
-      - name: Test (minimal, no IPC, wayvnc)
+      - name: Test (minimal, no IPC, wayvnc, sandbox)
         run: |
           mkdir -m 0700 -p "$XDG_RUNTIME_DIR"
           # test_utils.py looks for ./build/tests/wayland-test-client

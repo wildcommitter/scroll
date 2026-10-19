@@ -27,6 +27,8 @@
 #include "sway/tree/root.h"
 #include "sway/tree/node.h"
 #include "sway/ipc-server.h"
+#include "sway/sandbox.h"
+#include "sway/spawn.h"
 #include "ipc-client.h"
 #include "sway/log.h"
 #include "util.h"
@@ -371,6 +373,12 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
+	// Before any socket or input exists, and before the nofile bump, so
+	// children start with the original limit
+	if (!spawn_init()) {
+		return 1;
+	}
+
 	increase_nofile_limit();
 
 	sway_log(SWAY_INFO, "Starting scroll version " SWAY_VERSION);
@@ -435,6 +443,15 @@ int main(int argc, char **argv) {
 		swaynag_show(&nag_gpu);
 	}
 
+#if HAVE_SANDBOX
+	if (!sandbox_apply(config->current_config_path)) {
+		// Fail closed
+		sway_log(SWAY_ERROR, "Unable to sandbox the compositor, exiting");
+		sway_terminate(EXIT_FAILURE);
+		goto shutdown;
+	}
+#endif
+
 	server_run(&server);
 
 shutdown:
@@ -454,6 +471,7 @@ shutdown:
 	}
 
 	pango_cairo_font_map_set_default(NULL);
+	spawn_fini();
 
 	return exit_value;
 }

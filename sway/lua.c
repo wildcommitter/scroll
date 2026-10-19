@@ -17,6 +17,7 @@
 #include "sway/ipc-server.h"
 #include "sway/desktop/transaction.h"
 #include "sway/server.h"
+#include "sway/spawn.h"
 #include "stringop.h"
 
 #if 0
@@ -526,21 +527,25 @@ static int scroll_exec_process(lua_State *L) {
 	const char *cmd = luaL_checkstring(L, 1);
 	struct launcher_ctx *ctx = launcher_ctx_create_internal();
 
-	// Fork process
-	pid_t child = fork();
-	if (child == 0) {
-		setsid();
-
-		if (ctx) {
-			const char *token = launcher_ctx_get_token_name(ctx);
-			setenv("XDG_ACTIVATION_TOKEN", token, 1);
-			setenv("DESKTOP_STARTUP_ID", token, 1);
+	char *token_env = NULL, *startup_env = NULL;
+	const char *env[3] = { NULL };
+	if (ctx) {
+		const char *token = launcher_ctx_get_token_name(ctx);
+		token_env = format_str("XDG_ACTIVATION_TOKEN=%s", token);
+		startup_env = format_str("DESKTOP_STARTUP_ID=%s", token);
+		int nenv = 0;
+		if (token_env) {
+			env[nenv++] = token_env;
 		}
-
-		execlp("sh", "sh", "-c", cmd, (void*)NULL);
-		sway_log_errno(SWAY_ERROR, "execve failed");
-		_exit(0); // Close child process
-	} else if (child < 0) {
+		if (startup_env) {
+			env[nenv++] = startup_env;
+		}
+	}
+	struct spawn_options opts = { .setsid = true, .wayland_fd = -1, .stdin_fd = -1, .env = env };
+	pid_t child = spawn_shell(cmd, &opts);
+	free(token_env);
+	free(startup_env);
+	if (child < 0) {
 		launcher_ctx_destroy(ctx);
 		lua_pushnil(L);
 		return 1;

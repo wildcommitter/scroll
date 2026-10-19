@@ -23,6 +23,7 @@
 #include "sway/tree/arrange.h"
 #include "sway/tree/root.h"
 #include "sway/log.h"
+#include "sway/spawn.h"
 #include "util.h"
 
 #if WLR_HAS_DRM_BACKEND
@@ -1319,25 +1320,13 @@ static bool _spawn_swaybg(char **command) {
 	wl_client_add_destroy_listener(config->swaybg_client,
 		&config->swaybg_client_destroy);
 
-	pid_t pid = fork();
-	if (pid < 0) {
-		sway_log_errno(SWAY_ERROR, "fork failed");
-		return false;
-	} else if (pid == 0) {
-		if (!sway_set_cloexec(sockets[1], false)) {
-			_exit(EXIT_FAILURE);
-		}
-
-		char wayland_socket_str[16];
-		snprintf(wayland_socket_str, sizeof(wayland_socket_str),
-			"%d", sockets[1]);
-		setenv("WAYLAND_SOCKET", wayland_socket_str, true);
-
-		execvp(command[0], command);
-		sway_log_errno(SWAY_ERROR, "failed to execute '%s' "
+	struct spawn_options opts = { .wayland_fd = sockets[1], .stdin_fd = -1 };
+	if (spawn_argv(command, &opts) < 0) {
+		sway_log(SWAY_ERROR, "failed to execute '%s' "
 			"(background configuration probably not applied)",
 			command[0]);
-		_exit(EXIT_FAILURE);
+		close(sockets[1]);
+		return false;
 	}
 
 	if (close(sockets[1]) != 0) {
