@@ -169,6 +169,12 @@ endif
 add_project_arguments('-DSYSCONFDIR="/@0@"'.format(join_paths(prefix, sysconfdir)), language : 'c')
 
 version = '"@0@"'.format(meson.project_version())
+if get_option('vcs-commit') != ''
+	version = '"@0@-@1@ (" __DATE__ ", packaged)"'.format(
+		meson.project_version(),
+		get_option('vcs-commit'),
+	)
+endif
 git = find_program('git', native: true, required: false)
 if git.found()
 	git_commit = run_command([git, '--git-dir=.git', 'rev-parse', '--short', 'HEAD'], check: false)

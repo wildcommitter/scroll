@@ -1,0 +1,89 @@
+# Build the Fedora 44 RPM of the fork from this checkout (packaging/), in the
+# upstream and the hardened (scroll-secure) profile, then lint it and install
+# it into a clean Fedora root.
+#
+# Verification only: nothing is uploaded (no artifacts, no releases). The
+# scroll-secure image builds its own RPM from a pinned checkout with the same
+# spec and never consumes output from this workflow.
+name: rpm
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rpm:
+    runs-on: ubuntu-latest
+    container: quay.io/fedora/fedora:44
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [default, hardened]
+    steps:
+      - name: Install packaging tools
+        run: dnf -y install git rpm-build rpmlint 'dnf5-command(builddep)' binutils cpio
+      - uses: actions/checkout@v4
+      - name: Make the SRPM
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          srpm=$(packaging/make-srpm.sh -o "$RUNNER_TEMP/srpm")
+          echo "SRPM=$srpm" >> "$GITHUB_ENV"
+          echo "SRPM: $srpm"
+      - name: Install build dependencies
+        run: |
+          if [ "${{ matrix.profile }}" = hardened ]; then
+            dnf -y builddep --define 'with_hardened 1' "$SRPM"
+          else
+            dnf -y builddep "$SRPM"
+          fi
+      - name: Build (%check gates the hardening flags)
+        run: |
+          opt=
+          [ "${{ matrix.profile }}" = hardened ] && opt="--with hardened"
+          rpmbuild --rebuild $opt --define "_topdir $RUNNER_TEMP/rpmbuild" "$SRPM"
+          ls "$RUNNER_TEMP"/rpmbuild/RPMS/*/
+      - name: rpmlint (fails on errors only)
+        run: |
+          rpms=$(ls "$RUNNER_TEMP"/rpmbuild/RPMS/*/scroll-1*.rpm)
+          out=$(rpmlint "$SRPM" $rpms 2>&1) || true
+          echo "$out"
+          errors=$(sed -n 's/.* \([0-9][0-9]*\) errors.*/\1/p' <<<"$out" | tail -n 1)
+          echo "rpmlint errors: ${errors:-unknown}"
+          [ "${errors:-1}" = 0 ]
+      - name: Check the hardened package contents
+        if: matrix.profile == 'hardened'
+        run: |
+          rpm=$(ls "$RUNNER_TEMP"/rpmbuild/RPMS/*/scroll-1*.rpm)
+          rpm -qlp "$rpm"
+          ! rpm -qlp "$rpm" | grep -E '/usr/bin/(scrollmsg|scrollbar)$'
+          d=$(mktemp -d)
+          # Not a pipe: cpio stops at the trailer and rpm2cpio would die of SIGPIPE
+          rpm2cpio "$RUNNER_TEMP"/rpmbuild/RPMS/*/scroll-debuginfo-*.rpm > "$d/debuginfo.cpio"
+          (cd "$d" && cpio -idm --quiet < debuginfo.cpio)
+          dbg=$(find "$d" -path '*bin/scroll-*.debug' -print -quit)
+          nm "$dbg" > "$d/syms"
+          [ "$(wc -l < "$d/syms")" -gt 1000 ] || { echo "no symbol table in $dbg"; exit 1; }
+          fail=0
+          for s in ipc_client_handle_command luaL_newstate wlr_xwayland vulkan wlr_x11_backend_create; do
+            n=$(grep -ci -- "$s" "$d/syms" || true)
+            echo "$s: $n"
+            [ "$n" = 0 ] || fail=1
+          done
+          # The sandbox must be in (LTO may inline the helpers into sandbox_apply)
+          n=$(grep -cE 'sandbox_apply|seccomp_apply|landlock_apply' "$d/syms" || true)
+          echo "sandbox symbols: $n"
+          [ "$n" -gt 0 ] || fail=1
+          exit $fail
+      - name: Install into a clean Fedora root
+        run: |
+          root=$RUNNER_TEMP/clean
+          rpm=$(ls "$RUNNER_TEMP"/rpmbuild/RPMS/*/scroll-1*.rpm)
+          dnf -y --installroot="$root" --releasever=44 --use-host-config \
+            --setopt=install_weak_deps=False install "$rpm"
+          chroot "$root" scroll -v
+          chroot "$root" sh -c 'export XDG_RUNTIME_DIR=$(mktemp -d) WLR_BACKENDS=headless \
+            WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1; scroll -C -c /etc/scroll/config'

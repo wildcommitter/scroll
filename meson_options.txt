@@ -9,5 +9,6 @@ option('gdk-pixbuf', type: 'feature', value: 'auto', description: 'Enable suppor
 option('sandbox', type: 'boolean', value: false, description: 'Run the compositor under seccomp and Landlock, with exec done by a broker')
 option('ipc', type: 'boolean', value: true, description: 'Enable the IPC socket (scrollmsg, scrollbar)')
 option('lua', type: 'feature', value: 'auto', description: 'Enable the Lua scripting API')
+option('vcs-commit', type: 'string', value: '', description: 'Commit reported by --version when building without .git (packaging)')
 option('man-pages', type: 'feature', value: 'auto', description: 'Generate and install man pages')
 option('sd-bus-provider', type: 'combo', choices: ['auto', 'libsystemd', 'libelogind', 'basu'], value: 'auto', description: 'Provider of the sd-bus library')

@@ -171,6 +171,39 @@ pytest tests/                                    # builds ./build itself with AS
 Dependencies are sway's plus `lua >= 5.4`. In a Fedora container, `dnf builddep sway` plus
 `lua-devel` covers them; scroll-secure's `scroll-build` stage is the reference.
 
+## Fedora RPM (`packaging/`)
+
+`packaging/scroll.spec` builds this tree for Fedora 44. Fedora's hardening flags come from
+`%meson`, and wlroots is linked in statically; nothing from wlroots is installed.
+`packaging/make-srpm.sh` makes the source RPM offline: the tarball is a `git archive` of
+the commit, and the spec's `@...@` fields are filled in from it. It refuses a dirty tree.
+
+| Profile | Switch | meson options |
+|---|---|---|
+| upstream feature set | (default) | Lua, IPC, scrollbar, Xwayland, all wlroots renderers and backends |
+| scroll-secure | `--with hardened` | `-Dlua=disabled -Dipc=false -Dscrollbar=false -Dsandbox=true`, wlroots `xwayland=disabled renderers=gles2 backends=drm,libinput`. Release gets `.hardened` |
+
+The individual switches (`lua`, `ipc`, `scrollbar`, `xwayland`, `sandbox`, `trim_wlroots`)
+can be overridden with `--with`/`--without`.
+
+`%check` fails the build unless `/usr/bin/scroll` passes `packaging/check-hardening.sh`:
+PIE, RELRO, BIND_NOW, stack protector, FORTIFY, and CET IBT/SHSTK on x86_64. It also runs
+`scroll -v` and `scroll -C` on the shipped config (headless backend). A build with Fedora's
+flags overridden fails on 5 of the 7 checks.
+
+```sh
+srpm=$(packaging/make-srpm.sh -o /tmp/srpm)        # HEAD, or name a commit
+dnf -y builddep "$srpm"
+rpmbuild --rebuild --with hardened "$srpm"
+dnf -y install ~/rpmbuild/RPMS/x86_64/scroll-*.hardened.*.rpm
+```
+
+`.github/workflows/rpm.yml` runs the same steps for both profiles: rpmlint (fails on
+errors), checks of the hardened package's contents (no scrollmsg or scrollbar; no IPC
+dispatch, Lua, Xwayland, Vulkan or X11 backend symbols; sandbox present, checked in the
+debuginfo), and an install into a clean Fedora root. It uploads nothing. The scroll-secure
+image builds its own RPM from a pinned checkout and never uses CI output.
+
 ## State when forked (2026-10-19)
 
 - Tag `1.12.21` is `f80c5820` (2026-08-21). That's the commit scroll-secure pins.
