@@ -109,6 +109,7 @@ struct sway_server {
 	struct wlr_ext_data_control_manager_v1 *ext_data_control_manager_v1;
 	struct wlr_screencopy_manager_v1 *screencopy_manager_v1;
 	struct wlr_ext_image_copy_capture_manager_v1 *ext_image_copy_capture_manager_v1;
+	struct wlr_ext_output_image_capture_source_manager_v1 *ext_output_image_capture_source_manager_v1;
 	struct wlr_export_dmabuf_manager_v1 *export_dmabuf_manager_v1;
 	struct wlr_security_context_manager_v1 *security_context_manager_v1;
 

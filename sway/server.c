@@ -120,6 +120,8 @@ static bool is_privileged(const struct wl_global *global) {
 		global == server.ext_data_control_manager_v1->global ||
 		global == server.screencopy_manager_v1->global ||
 		global == server.ext_image_copy_capture_manager_v1->global ||
+		global == server.ext_output_image_capture_source_manager_v1->global ||
+		global == server.ext_foreign_toplevel_image_capture_source_manager_v1->global ||
 		global == server.export_dmabuf_manager_v1->global ||
 		global == server.security_context_manager_v1->global ||
 		global == server.gamma_control_manager_v1->global ||
@@ -158,6 +160,8 @@ static bool is_restricted(const struct wl_global *global) {
 		global == server.ext_data_control_manager_v1->global ||
 		global == server.screencopy_manager_v1->global ||
 		global == server.ext_image_copy_capture_manager_v1->global ||
+		global == server.ext_output_image_capture_source_manager_v1->global ||
+		global == server.ext_foreign_toplevel_image_capture_source_manager_v1->global ||
 		global == server.export_dmabuf_manager_v1->global ||
 		global == server.gamma_control_manager_v1->global ||
 		global == server.layer_shell->global ||
@@ -562,7 +566,9 @@ bool server_init(struct sway_server *server) {
 		sway_log(SWAY_ERROR, "Failed to create ext image copy capture manager");
 		return false;
 	}
-	if (!wlr_ext_output_image_capture_source_manager_v1_create(server->wl_display, 1)) {
+	server->ext_output_image_capture_source_manager_v1 =
+		wlr_ext_output_image_capture_source_manager_v1_create(server->wl_display, 1);
+	if (!server->ext_output_image_capture_source_manager_v1) {
 		sway_log(SWAY_ERROR, "Failed to create ext output image capture source manager");
 		return false;
 	}

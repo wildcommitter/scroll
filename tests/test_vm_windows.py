@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from test_privileged import WL_CLIENT, client_env, compositor, wait_for  # noqa: F401
+from test_privileged import RESTRICTED, WL_CLIENT, client_env, compositor, wait_for  # noqa: F401
 from test_utils import ScrollInstance, find_node_by_title_contains, wayland_client, wait_for_client_map
 
 TEST_CLIENT = Path("./build/tests/wayland-test-client").resolve()
@@ -50,6 +50,8 @@ def test_unprivileged_other_engine_works(compositor, tmp_path: Path) -> None:
     # A sandboxed client can't nest: the manager is hidden from it (and
     # wlroots refuses a nested commit anyway)
     assert "wp_security_context_manager_v1" not in globs
+    for iface in RESTRICTED:
+        assert iface not in globs, f"{iface} visible to a sandboxed client"
 
 
 def test_vm_engine_strict_with_privileged_clients_all(compositor, tmp_path: Path) -> None:
