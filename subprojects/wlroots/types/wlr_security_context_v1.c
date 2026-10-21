@@ -199,6 +199,17 @@ static void security_context_handle_commit(struct wl_client *client,
 		return;
 	}
 
+	// scroll-secure: let the compositor refuse the context before it accepts
+	// any connection
+	struct wlr_security_context_manager_v1 *manager = security_context->manager;
+	if (manager->commit_filter != NULL && !manager->commit_filter(
+			&security_context->state, client, manager->commit_filter_data)) {
+		wl_resource_post_error(resource,
+			WP_SECURITY_CONTEXT_V1_ERROR_INVALID_METADATA,
+			"Security context refused by the compositor");
+		return;
+	}
+
 	struct wl_display *display = wl_client_get_display(client);
 	struct wl_event_loop *loop = wl_display_get_event_loop(display);
 

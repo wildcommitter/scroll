@@ -11,6 +11,8 @@
 
 #include <wayland-server-core.h>
 
+struct wlr_security_context_v1_state;
+
 /**
  * An implementation of the security context protocol.
  *
@@ -27,6 +29,13 @@ struct wlr_security_context_manager_v1 {
 	} events;
 
 	void *data;
+
+	// scroll-secure: optional veto, consulted by commit before the listener
+	// is armed. Returning false refuses the context with an invalid_metadata
+	// protocol error, and no client can ever connect through it.
+	bool (*commit_filter)(const struct wlr_security_context_v1_state *state,
+		struct wl_client *parent_client, void *data);
+	void *commit_filter_data;
 
 	struct {
 		struct wl_list contexts; // wlr_security_context_v1.link

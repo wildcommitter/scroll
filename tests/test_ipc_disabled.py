@@ -1,8 +1,10 @@
+import json
 import os
 import shutil
 import socket
 import struct
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Generator
@@ -173,3 +175,42 @@ def test_no_ipc_sandbox(
     assert int(_status(f"/proc/{proc.pid}/status", "Seccomp_filters")) == mine + 1
     assert _status(f"/proc/{proc.pid}/status", "NoNewPrivs") == "1"
     assert proc.poll() is None
+
+
+WL_CLIENT = Path(__file__).parent.resolve() / "wl_client.py"
+VM_OUT = Path(f"/tmp/scroll-test-vm-context.{os.getpid()}.json")  # per xdist worker
+
+
+def _seccontext(env: dict, out: Path, engine: str) -> dict:
+    subprocess.run([sys.executable, "-I", str(WL_CLIENT), "seccontext", str(out), engine],
+                   env=env, check=True, timeout=10)
+    return json.loads(out.read_text())
+
+
+def test_unprivileged_vm_context_refused(
+    no_ipc_compositor: tuple[subprocess.Popen, Path, dict], tmp_path: Path
+) -> None:
+    # The shipped build: a host app can't claim the "scroll-vm" engine
+    proc, _, env = no_ipc_compositor
+    res = _seccontext(env, tmp_path / "vm.json", "scroll-vm")
+    assert res["result"] == "error" and "protocol error 3" in res["error"], res
+    assert _seccontext(env, tmp_path / "fp.json", "flatpak")["result"] == "ok"
+    assert proc.poll() is None
+
+
+
+@pytest.mark.parametrize(
+    "no_ipc_compositor",
+    [f"exec_privileged {sys.executable} -I {WL_CLIENT} seccontext {VM_OUT} scroll-vm\n"],
+    indirect=True, ids=["exec_privileged"],  # VM_OUT differs per xdist worker
+)
+def test_privileged_vm_context(
+    no_ipc_compositor: tuple[subprocess.Popen, Path, dict]
+) -> None:
+    try:
+        assert _wait(VM_OUT.exists)
+        res = json.loads(VM_OUT.read_text())
+        assert res["result"] == "ok", res
+        assert "wl_compositor" in res["child_globals"]
+    finally:
+        VM_OUT.unlink(missing_ok=True)

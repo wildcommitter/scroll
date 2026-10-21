@@ -54,6 +54,7 @@ sway_sources = files(
 	'commands/bar.c',
 	'commands/bind.c',
 	'commands/border.c',
+	'commands/border_color.c',
 	'commands/client.c',
 	'commands/create_output.c',
 	'commands/cycle_size.c',

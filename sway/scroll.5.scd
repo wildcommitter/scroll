@@ -467,6 +467,24 @@ They are expected to be used with *bindsym* or at runtime through *scrollmsg*(1)
 *border* toggle
 	Cycles through the available border styles.
 
+*border_color* <color>|none
+	Gives the window a frame color of its own, as _#RRGGBB_ or _#RRGGBBAA_.
+	It is used for the border, the title bar background and the child border,
+	and it wins over every other color state (urgent, selection, pinned,
+	sticky). A focused window uses _color_ with the text and indicator colors
+	of *client.focused*. An unfocused window uses _color_ darkened to 55% with
+	the text color of *client.unfocused*. _none_ removes it. This command is
+	meant for *for_window* rules, for example to mark the windows of a VM:
+
+		for_window [sandbox_engine="^scroll-vm$" sandbox_app_id="^work$"] border_color #cc3333, border normal 3
+
+	Only a privileged client (see *privileged_clients*) can create a security
+	context whose sandbox engine contains _scroll-vm_, whatever
+	*privileged_clients* is set to, so such a rule can't be matched by an
+	ordinary app. Anchor the criteria with _^...$_, since they are regular
+	expressions. Window titles stay under the client's control, so
+	*title_format* alone is no proof of origin.
+
 *cycle_size* <h|v> <next|prev>
 	Cycles the widths/heights of windows/columns/rows in horizontal or vertical
 	modes. See the *cycle_size_wrap* option if you want to wrap from the last
@@ -2118,7 +2136,8 @@ The following attributes may be matched with:
 *sandbox_engine*
 	Compare against the associated sandbox engine. Can be a regular expression.
 	If the value is \_\_focused\_\_, then the sandbox engine must be the same as
-	that of the currently focused window.
+	that of the currently focused window. Engines containing _scroll-vm_ are
+	reserved for privileged clients (see *border_color*).
 
 *sandbox_app_id*
 	Compare against the app ID provided by the associated sandbox engine. Can be

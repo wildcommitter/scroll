@@ -3,6 +3,12 @@
   wl_client.py globals OUT.json   # write the advertised interface names
   wl_client.py lock CTLDIR        # take the session lock, write CTLDIR/locked,
                                   # unlock once CTLDIR/unlock exists
+  wl_client.py seccontext OUT.json ENGINE [CMD ...]
+                                  # commit a security context with ENGINE
+                                  # (app_id and instance_id "work") and write
+                                  # {"result": "ok"|"error", ...}; on ok, also
+                                  # the globals a client of it sees, then run
+                                  # CMD as a client of it
 
 Connects over WAYLAND_SOCKET (privileged spawn) or WAYLAND_DISPLAY.
 """
@@ -10,17 +16,23 @@ import json
 import os
 import socket
 import struct
+import subprocess
 import sys
+import tempfile
 import time
 
 
+class ProtocolError(RuntimeError):
+    pass
+
+
 class Client:
-    def __init__(self) -> None:
-        fd = os.environ.pop("WAYLAND_SOCKET", None)
+    def __init__(self, display: str | None = None) -> None:
+        fd = None if display else os.environ.pop("WAYLAND_SOCKET", None)
         if fd is not None:
             self.sock = socket.socket(fileno=int(fd))
         else:
-            name = os.environ["WAYLAND_DISPLAY"]
+            name = display or os.environ["WAYLAND_DISPLAY"]
             path = name if name.startswith("/") else os.path.join(
                 os.environ["XDG_RUNTIME_DIR"], name)
             self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -35,9 +47,14 @@ class Client:
         self.next_id += 1
         return i
 
-    def send(self, obj: int, opcode: int, payload: bytes = b"") -> None:
+    def send(self, obj: int, opcode: int, payload: bytes = b"", fds: tuple = ()) -> None:
         size = 8 + len(payload)
-        self.sock.sendall(struct.pack("<II", obj, (size << 16) | opcode) + payload)
+        data = struct.pack("<II", obj, (size << 16) | opcode) + payload
+        if fds:
+            anc = [(socket.SOL_SOCKET, socket.SCM_RIGHTS, struct.pack(f"{len(fds)}i", *fds))]
+            self.sock.sendmsg([data], anc)
+        else:
+            self.sock.sendall(data)
 
     @staticmethod
     def string(s: str) -> bytes:
@@ -53,8 +70,10 @@ class Client:
         obj, word = struct.unpack_from("<II", self.buf)
         size = word >> 16
         msg, self.buf = self.buf[8:size], self.buf[size:]
-        if obj == 1 and (word & 0xFFFF) == 0:
-            raise RuntimeError(f"protocol error: {msg!r}")
+        if obj == 1 and (word & 0xFFFF) == 0:  # wl_display.error
+            _, code, length = struct.unpack_from("<III", msg)
+            text = msg[12:12 + length - 1].decode(errors="replace")
+            raise ProtocolError(f"protocol error {code}: {text}")
         return obj, word & 0xFFFF, msg
 
     def roundtrip(self) -> None:
@@ -124,5 +143,44 @@ def cmd_lock(ctl: str) -> None:
     open(os.path.join(ctl, "unlocked"), "w").close()
 
 
+def write_json(out: str, data: object) -> None:
+    tmp = out + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    os.rename(tmp, out)
+
+
+def cmd_seccontext(out: str, engine: str, *cmd: str) -> None:
+    c = Client()
+    c.get_registry()
+    manager = c.bind("wp_security_context_manager_v1", 1)
+    path = os.path.join(tempfile.mkdtemp(prefix="wlsc"), "sock")  # short sun_path
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(path)
+    listener.listen()
+    close_r, close_w = os.pipe()  # the context lives until close_w is closed
+    ctx = c.new_id()
+    # wp_security_context_manager_v1.create_listener(new_id, fd, fd)
+    c.send(manager, 1, struct.pack("<I", ctx), fds=(listener.fileno(), close_r))
+    os.close(close_r)
+    c.send(ctx, 1, c.string(engine))  # set_sandbox_engine
+    c.send(ctx, 2, c.string("work"))  # set_app_id
+    c.send(ctx, 3, c.string("work"))  # set_instance_id
+    c.send(ctx, 4)  # commit
+    try:
+        c.roundtrip()
+    except ProtocolError as e:
+        write_json(out, {"result": "error", "error": str(e)})
+        return
+    child = Client(display=path)
+    child.get_registry()
+    write_json(out, {"result": "ok", "child_globals": sorted(child.globals)})
+    if cmd:
+        env = dict(os.environ, WAYLAND_DISPLAY=path)
+        subprocess.run(cmd, env=env)
+    os.close(close_w)
+
+
 if __name__ == "__main__":
-    {"globals": cmd_globals, "lock": cmd_lock}[sys.argv[1]](sys.argv[2])
+    {"globals": cmd_globals, "lock": cmd_lock,
+     "seccontext": cmd_seccontext}[sys.argv[1]](*sys.argv[2:])

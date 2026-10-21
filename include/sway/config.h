@@ -447,13 +447,7 @@ struct tray_binding {
 };
 #endif
 
-struct border_colors {
-	float border[4];
-	float background[4];
-	float text[4];
-	float indicator[4];
-	float child_border[4];
-};
+// struct border_colors is in tree/container.h (scroll-secure: border_color)
 
 enum edge_border_types {
 	E_NONE, /**< Don't hide edge borders */

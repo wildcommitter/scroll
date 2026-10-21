@@ -11,6 +11,14 @@
 struct sway_view;
 struct sway_seat;
 
+struct border_colors {
+	float border[4];
+	float background[4];
+	float text[4];
+	float indicator[4];
+	float child_border[4];
+};
+
 enum sway_container_layout {
 	L_NONE,
 	L_HORIZ,
@@ -145,6 +153,15 @@ struct sway_container {
 	double title_width;
 
 	char *title_format;
+
+	// scroll-secure: per-window frame color ("border_color"), above every
+	// other color state. colors is scratch space filled in by
+	// container_get_current_colors().
+	struct {
+		bool set;
+		float color[4];
+		struct border_colors colors;
+	} border_color;
 
 	enum sway_container_layout prev_split_layout;
 

@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <float.h>
 #include <json.h>
+#include <math.h>
 #include <libevdev/libevdev.h>
 #include <stdio.h>
 #include <wlr/config.h>
@@ -719,6 +720,17 @@ static void ipc_json_describe_container(struct sway_container *c, json_object *o
 		view_is_urgent(c->view) : container_has_urgent_child(c);
 	json_object_object_add(object, "urgent", json_object_new_boolean(urgent));
 	json_object_object_add(object, "sticky", json_object_new_boolean(c->is_sticky));
+
+	// scroll-secure: the border_color override, only when set
+	if (c->border_color.set) {
+		char hex[10];
+		snprintf(hex, sizeof(hex), "#%02x%02x%02x%02x",
+			(unsigned)lroundf(c->border_color.color[0] * 255.0f),
+			(unsigned)lroundf(c->border_color.color[1] * 255.0f),
+			(unsigned)lroundf(c->border_color.color[2] * 255.0f),
+			(unsigned)lroundf(c->border_color.color[3] * 255.0f));
+		json_object_object_add(object, "border_color", json_object_new_string(hex));
+	}
 
 	// sway doesn't track the floating reason, so we can't use "auto_on" or "user_off"
 	json_object_object_add(object, "floating",

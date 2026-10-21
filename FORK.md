@@ -40,6 +40,7 @@ maintainer: dawsers has about 760 of the 790 commits from the last year.
 | Privileged protocols | always | `privileged_clients all` (config only) restores sway | Only clients scroll starts over `WAYLAND_SOCKET` (swaybg, scrollnag, scrollbar, `exec_privileged`, `lock_command`) can bind screen capture, virtual input, data-control, input-method, session-lock, layer-shell, toplevel/workspace/output management, gamma and DRM leases. Only holds with `-Dipc=false` |
 | Locking | always | `lock`, SIGUSR1, `scroll-lock` | `lock` starts `lock_command` as a privileged client. `$XDG_RUNTIME_DIR/scroll-locked.$SCROLL_PID` exists while locked; `scroll-lock` signals scroll and waits for it (for swayidle `before-sleep`) |
 | Process sandbox | `-Dsandbox=true` (needs `-Dwlroots:xwayland=disabled`) | none: env vars are attacker-writable (environment.d, profile) | Default: no sandbox, but exec still goes through the broker. See [Sandbox](#sandbox-dsandboxtrue) |
+| VM windows | always | none (also with `privileged_clients all`) | Only a privileged client can commit a `wp_security_context_v1` whose sandbox engine contains `scroll-vm`; others get `invalid_metadata` and no listener. `border_color <#rrggbb[aa]>\|none` (criteria, `for_window`) gives a window a frame color above every other state (urgent, selected, pinned, sticky), darkened to 55% when unfocused. See [VM windows](#vm-windows) |
 | IPC socket | `-Dipc=false` (the socket, read and command-dispatch code is compiled out; scrollmsg isn't built) | `SCROLL_DISABLE_IPC=1` | No socket is created, `SWAYSOCK`/`I3SOCK`/`SCROLLSOCK` are unset, and `bar {}` isn't started. scrollmsg, scrollbar and waybar stop working |
 
 The minimal build is `-Dlua=disabled -Dipc=false -Dscrollbar=false` (scroll-secure adds
@@ -56,6 +57,30 @@ image configuration (plus `-Dwlroots:xwayland=disabled -Dwlroots:renderers=gles2
 -Dwlroots:backends=drm,libinput -Dsandbox=true`).
 It tests that build with wayvnc and checks with nm that IPC, Lua, Xwayland and Vulkan are
 gone. The weekly run's summary lists the upstream commits and chases this branch is missing.
+
+## VM windows
+
+Qubes-style frames for guest apps. A helper started with `exec_privileged` creates a security
+context with sandbox engine `scroll-vm` and app and instance ID `<vm>`, and runs `waypipe
+client` on its listener. Guest windows are clients of that context, so a rule can mark them:
+
+```
+for_window [sandbox_engine="^scroll-vm$" sandbox_app_id="^work$"] border_color #cc3333, border normal 3
+```
+
+- **Unspoofable engine.** `sway/privileged.c` installs a `commit_filter` on the security
+  context manager. That hook is ours (in the wlroots copy, `types/wlr_security_context_v1.c`),
+  consulted before the listener is armed, because the `commit` event can't refuse. Engines
+  that merely contain `scroll-vm` are refused too, since criteria are unanchored regexes.
+- **No nesting.** A sandboxed client never sees `wp_security_context_manager_v1`
+  (`filter_global`), and wlroots refuses a nested commit with the `nested` error anyway. A
+  guest can't create contexts of its own.
+- **The color is the identity, not the title.** `title_format` text such as `[work]` is
+  next to a title the client controls. Anchor `sandbox_app_id` too, or VM `network` matches
+  `work`.
+- IPC `get_tree` shows `"border_color": "#rrggbbaa"` on containers that have one.
+- `tests/test_vm_windows.py` (default build) and the `seccontext` cases in
+  `tests/test_ipc_disabled.py` (minimal build) cover this.
 
 ## Sandbox (`-Dsandbox=true`)
 

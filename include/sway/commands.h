@@ -116,6 +116,7 @@ sway_cmd cmd_bindgesture;
 sway_cmd cmd_bindswitch;
 sway_cmd cmd_bindsym;
 sway_cmd cmd_border;
+sway_cmd cmd_border_color;
 sway_cmd cmd_center_horizontal_if_fits;
 sway_cmd cmd_center_vertical_if_fits;
 sway_cmd cmd_client_noop;

@@ -581,6 +581,8 @@ bool server_init(struct sway_server *server) {
 		sway_log(SWAY_ERROR, "Failed to create security context manager");
 		return false;
 	}
+	server->security_context_manager_v1->commit_filter =
+		privileged_security_context_filter;
 	if (!wlr_viewporter_create(server->wl_display)) {
 		sway_log(SWAY_ERROR, "Failed to create viewporter");
 		return false;

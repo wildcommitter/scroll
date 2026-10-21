@@ -192,6 +192,36 @@ static struct border_colors *container_get_current_colors(
 		active_child = NULL;
 	}
 
+	// scroll-secure: a border_color override wins over every state (urgent,
+	// selected, pinned, sticky), so another state can never repaint a VM frame
+	if (con->border_color.set) {
+		struct border_colors *over = &con->border_color.colors;
+		bool focused = con->current.focused ||
+			container_is_current_parent_focused(con);
+		float shade[4];
+		memcpy(shade, con->border_color.color, sizeof(shade));
+		if (!focused) {
+			for (int i = 0; i < 3; i++) {
+				shade[i] *= 0.55f;
+			}
+		}
+		memcpy(over->border, shade, sizeof(shade));
+		memcpy(over->background, shade, sizeof(shade));
+		memcpy(over->child_border, shade, sizeof(shade));
+		if (focused) {
+			memcpy(over->text, config->border_colors.focused.text,
+				sizeof(over->text));
+			memcpy(over->indicator, config->border_colors.focused.indicator,
+				sizeof(over->indicator));
+		} else {
+			memcpy(over->text, config->border_colors.unfocused.text,
+				sizeof(over->text));
+			memcpy(over->indicator, config->border_colors.unfocused.indicator,
+				sizeof(over->indicator));
+		}
+		return over;
+	}
+
 	if (urgent) {
 		colors = &config->border_colors.urgent;
 	} else if (layout_selection_enabled(con)) {
