@@ -471,9 +471,10 @@ They are expected to be used with *bindsym* or at runtime through *scrollmsg*(1)
 	Gives the window a frame color of its own, as _#RRGGBB_ or _#RRGGBBAA_.
 	It is used for the border, the title bar background and the child border,
 	and it wins over every other color state (urgent, selection, pinned,
-	sticky). A focused window uses _color_ with the text and indicator colors
-	of *client.focused*. An unfocused window uses _color_ darkened to 55% with
-	the text color of *client.unfocused*. _none_ removes it. This command is
+	sticky). The split indicator takes it too, so the frame has the same color
+	on all four sides. A focused window uses _color_ with the text color of
+	*client.focused*. An unfocused window uses _color_ darkened to 55% with the
+	text color of *client.unfocused*. _none_ removes it. This command is
 	meant for *for_window* rules, for example to mark the windows of a VM:
 
 		for_window [sandbox_engine="^scroll-vm$" sandbox_app_id="^work$"] border_color #cc3333, border normal 3

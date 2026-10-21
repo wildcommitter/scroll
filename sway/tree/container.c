@@ -208,17 +208,11 @@ static struct border_colors *container_get_current_colors(
 		memcpy(over->border, shade, sizeof(shade));
 		memcpy(over->background, shade, sizeof(shade));
 		memcpy(over->child_border, shade, sizeof(shade));
-		if (focused) {
-			memcpy(over->text, config->border_colors.focused.text,
-				sizeof(over->text));
-			memcpy(over->indicator, config->border_colors.focused.indicator,
-				sizeof(over->indicator));
-		} else {
-			memcpy(over->text, config->border_colors.unfocused.text,
-				sizeof(over->text));
-			memcpy(over->indicator, config->border_colors.unfocused.indicator,
-				sizeof(over->indicator));
-		}
+		// The indicator replaces one side of the frame on focused windows, so
+		// it takes the frame color too
+		memcpy(over->indicator, shade, sizeof(shade));
+		memcpy(over->text, focused ? config->border_colors.focused.text :
+			config->border_colors.unfocused.text, sizeof(over->text));
 		return over;
 	}
 

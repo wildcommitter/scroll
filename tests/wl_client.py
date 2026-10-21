@@ -9,6 +9,8 @@
                                   # {"result": "ok"|"error", ...}; on ok, also
                                   # the globals a client of it sees, then run
                                   # CMD as a client of it
+  wl_client.py screenshot OUT     # screencopy the first output to OUT:
+                                  # <u32 width, height, stride> + XRGB rows
 
 Connects over WAYLAND_SOCKET (privileged spawn) or WAYLAND_DISPLAY.
 """
@@ -181,6 +183,45 @@ def cmd_seccontext(out: str, engine: str, *cmd: str) -> None:
     os.close(close_w)
 
 
+def cmd_screenshot(out: str) -> None:
+    c = Client()
+    c.get_registry()
+    shm = c.bind("wl_shm", 1)
+    output = c.bind("wl_output", 1)
+    manager = c.bind("zwlr_screencopy_manager_v1", 3)
+    frame = c.new_id()
+    c.send(manager, 0, struct.pack("<IiI", frame, 0, output))  # capture_output
+    st: dict = {}
+
+    def on_frame(opcode: int, msg: bytes) -> None:
+        if opcode == 0:  # buffer: format, width, height, stride
+            st["buffer"] = struct.unpack_from("<IIII", msg)
+        elif opcode in (2, 3, 6):  # ready, failed, buffer_done
+            st[{2: "ready", 3: "failed", 6: "done"}[opcode]] = True
+
+    c.handlers[frame] = on_frame
+    while "done" not in st:
+        c.roundtrip()
+    fmt, width, height, stride = st["buffer"]
+    size = stride * height
+    fd = os.memfd_create("screenshot")
+    os.ftruncate(fd, size)
+    pool = c.new_id()
+    c.send(shm, 0, struct.pack("<Ii", pool, size), fds=(fd,))  # create_pool
+    buf = c.new_id()
+    c.send(pool, 0, struct.pack("<IiiiiI", buf, 0, width, height, stride, fmt))
+    c.send(frame, 0, struct.pack("<I", buf))  # copy
+    while "ready" not in st and "failed" not in st:
+        c.roundtrip()
+    if "ready" not in st:
+        sys.exit("screencopy failed")
+    data = os.pread(fd, size, 0)
+    tmp = out + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(struct.pack("<III", width, height, stride) + data)
+    os.rename(tmp, out)
+
+
 if __name__ == "__main__":
-    {"globals": cmd_globals, "lock": cmd_lock,
-     "seccontext": cmd_seccontext}[sys.argv[1]](*sys.argv[2:])
+    {"globals": cmd_globals, "lock": cmd_lock, "seccontext": cmd_seccontext,
+     "screenshot": cmd_screenshot}[sys.argv[1]](*sys.argv[2:])

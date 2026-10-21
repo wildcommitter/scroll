@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include "render/pixman.h"
 
@@ -226,8 +227,87 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
 	pixman_image_unref(fill);
 }
 
+// scroll-secure: the pixman renderer drew no decorations at all, so with
+// pixman (headless, VMs without a GPU) windows had no borders or title bar
+// background. Fill the same areas as the gles2 decoration shader, with
+// square corners (border_radius is ignored) and no antialiasing.
+static void decoration_fill(struct wlr_pixman_render_pass *pass,
+		const struct wlr_render_decoration_options *options,
+		double lx, double ly, double lw, double lh,
+		const struct wlr_render_color *rc) {
+	if (rc->a <= 0 || lw <= 0 || lh <= 0) {
+		return;
+	}
+	const struct wlr_box *box = &options->box;
+	// Logical (untransformed) rect to buffer coordinates, the inverse of the
+	// shader's flip/swap of gl_FragCoord
+	double bx = lx, by = ly, bw = lw, bh = lh;
+	if (options->swap_xy) {
+		bx = ly;
+		by = lx;
+		bw = lh;
+		bh = lw;
+	}
+	if (options->flip_x) {
+		bx = box->width - bx - bw;
+	}
+	if (options->flip_y) {
+		by = box->height - by - bh;
+	}
+	int x0 = box->x + (int)round(bx), y0 = box->y + (int)round(by);
+	int x1 = box->x + (int)round(bx + bw), y1 = box->y + (int)round(by + bh);
+	if (x1 <= x0 || y1 <= y0) {
+		return;
+	}
+
+	struct pixman_color color = {
+		.red = rc->r * 0xFFFF,
+		.green = rc->g * 0xFFFF,
+		.blue = rc->b * 0xFFFF,
+		.alpha = rc->a * 0xFFFF,
+	};
+	pixman_op_t op = get_pixman_blending(rc->a == 1 ?
+		WLR_RENDER_BLEND_MODE_NONE : options->blend_mode);
+	pixman_image_t *fill = pixman_image_create_solid_fill(&color);
+	pixman_image_set_clip_region32(pass->buffer->image, options->clip);
+	pixman_image_composite32(op, fill, NULL, pass->buffer->image,
+		0, 0, 0, 0, x0, y0, x1 - x0, y1 - y0);
+	pixman_image_set_clip_region32(pass->buffer->image, NULL);
+	pixman_image_unref(fill);
+}
+
 static void render_pass_add_decoration(struct wlr_render_pass *wlr_pass,
 		const struct wlr_render_decoration_options *options) {
+	struct wlr_pixman_render_pass *pass = get_render_pass(wlr_pass);
+	double width = options->box.width, height = options->box.height;
+	if (options->swap_xy) {
+		width = options->box.height;
+		height = options->box.width;
+	}
+
+	double top = 0;
+	if (options->title_bar) {
+		top = fmin(options->title_bar_height, height);
+		decoration_fill(pass, options, 0, 0, width, top,
+			&options->title_bar_color);
+	}
+	double h = height - top;
+	double bw = options->border ? fmin(options->border_width, fmin(width, h) / 2) : 0;
+	if (bw > 0) {
+		// Left and right own the corners, like the shader
+		decoration_fill(pass, options, 0, top, bw, h,
+			&options->border_left_color);
+		decoration_fill(pass, options, width - bw, top, bw, h,
+			&options->border_right_color);
+		decoration_fill(pass, options, bw, top, width - 2 * bw, bw,
+			&options->border_top_color);
+		decoration_fill(pass, options, bw, top + h - bw, width - 2 * bw, bw,
+			&options->border_bottom_color);
+	}
+	if (options->dim) {
+		decoration_fill(pass, options, bw, top + bw, width - 2 * bw,
+			h - 2 * bw, &options->dim_color);
+	}
 }
 
 static void render_pass_add_shadow(struct wlr_render_pass *wlr_pass,
