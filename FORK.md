@@ -58,6 +58,19 @@ image configuration (plus `-Dwlroots:xwayland=disabled -Dwlroots:renderers=gles2
 It tests that build with wayvnc and checks with nm that IPC, Lua, Xwayland and Vulkan are
 gone. The weekly run's summary lists the upstream commits and chases this branch is missing.
 
+## Mouse (niri-style)
+
+| Action | What it does |
+|---|---|
+| mod + left drag | Moves a tiled window: drop on an edge of a window to put it beside it (new column) or above/below it (same column). Sway's `tiling_drag` with scroll's drop zones |
+| Drag a client's own title bar (CSD: GTK, Firefox) | The same move, for tiled windows too (sway did this for floating windows only). It starts past `tiling_drag_threshold`, so a click stays a click. `tiling_drag disable` turns both off |
+| mod + right drag | Resizes (tiled or floating) |
+| mod + middle drag | Scrolls the view |
+
+`tests/test_csd_drag.py` drags a tiled window by its title bar with a virtual pointer
+(`wl_client.py vpointer`): IPC `seat cursor move/set` only warps the cursor and never
+reaches a drag.
+
 ## VM windows
 
 Qubes-style frames for guest apps. A helper started with `exec_privileged` creates a security

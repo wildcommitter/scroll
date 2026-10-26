@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
 
@@ -14,6 +15,9 @@ struct client_state {
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
 	struct xdg_wm_base *xdg_wm_base;
+	struct wl_seat *seat;
+	struct wl_pointer *pointer;
+	int csd; // a left click asks to move the window, like a client-side title bar
 	struct wl_surface *surface;
 	struct xdg_surface *xdg_surface;
 	struct xdg_toplevel *xdg_toplevel;
@@ -42,10 +46,23 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 	} else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
 		state->xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(state->xdg_wm_base, &xdg_wm_base_listener, state);
+	} else if (strcmp(interface, wl_seat_interface.name) == 0 && !state->seat) {
+		state->seat = wl_registry_bind(registry, name, &wl_seat_interface, 1);
 	}
 }
 static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t name) {}
 static const struct wl_registry_listener registry_listener = { registry_global, registry_global_remove };
+
+static void pointer_button(void *data, struct wl_pointer *pointer, uint32_t serial,
+		uint32_t time, uint32_t button, uint32_t button_state) {
+	struct client_state *state = data;
+	if (button == BTN_LEFT && button_state == WL_POINTER_BUTTON_STATE_PRESSED) {
+		xdg_toplevel_move(state->xdg_toplevel, state->seat, serial);
+	}
+}
+static const struct wl_pointer_listener pointer_listener = {
+	.enter = noop, .leave = noop, .motion = noop, .button = pointer_button, .axis = noop,
+};
 
 static void xdg_surface_configure(void *data, struct xdg_surface *xdg_surface, uint32_t serial) {
 	struct client_state *state = data;
@@ -101,6 +118,7 @@ int main(int argc, char **argv) {
 	const char *app_id = "test_app_id";
 	if (argc > 1) title = argv[1];
 	if (argc > 2) app_id = argv[2];
+	state.csd = argc > 3 && strcmp(argv[3], "csd") == 0;
 
 	state.display = wl_display_connect(NULL);
 	if (!state.display) {
@@ -115,6 +133,15 @@ int main(int argc, char **argv) {
 	if (!state.compositor || !state.shm || !state.xdg_wm_base) {
 		fprintf(stderr, "Missing globals\n");
 		return 1;
+	}
+
+	if (state.csd) {
+		if (!state.seat) {
+			fprintf(stderr, "No seat\n");
+			return 1;
+		}
+		state.pointer = wl_seat_get_pointer(state.seat);
+		wl_pointer_add_listener(state.pointer, &pointer_listener, &state);
 	}
 
 	state.surface = wl_compositor_create_surface(state.compositor);

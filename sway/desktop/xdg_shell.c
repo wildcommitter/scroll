@@ -485,14 +485,21 @@ static void handle_request_move(struct wl_listener *listener, void *data) {
 	struct sway_xdg_shell_view *xdg_shell_view =
 		wl_container_of(listener, xdg_shell_view, request_move);
 	struct sway_view *view = &xdg_shell_view->view;
-	if (!container_is_floating(view->container) ||
-			view->container->pending.fullscreen_mode) {
+	if (view->container->pending.fullscreen_mode) {
 		return;
 	}
 	struct wlr_xdg_toplevel_move_event *e = data;
 	struct sway_seat *seat = e->seat->seat->data;
-	if (e->serial == seat->last_button_serial) {
+	if (e->serial != seat->last_button_serial) {
+		return;
+	}
+	if (container_is_floating(view->container)) {
 		seatop_begin_move_floating(seat, view->container);
+	} else if (config->tiling_drag) {
+		// Like niri: dragging a client's own title bar (CSD) moves a tiled window
+		// too, with the same drop zones as mod + drag. The threshold keeps a click
+		// on the title bar a click.
+		seatop_begin_move_tiling_threshold(seat, view->container);
 	}
 }
 

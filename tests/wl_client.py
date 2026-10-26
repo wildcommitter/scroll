@@ -11,6 +11,11 @@
                                   # CMD as a client of it
   wl_client.py screenshot OUT     # screencopy the first output to OUT:
                                   # <u32 width, height, stride> + XRGB rows
+  wl_client.py vpointer W H       # a virtual pointer on a W x H layout (the headless
+                                  # backend has no pointer); reads lines from stdin:
+                                  # "abs X Y", "rel DX DY", "down", "up" (left button),
+                                  # and answers each with "ok" once the compositor
+                                  # has it
 
 Connects over WAYLAND_SOCKET (privileged spawn) or WAYLAND_DISPLAY.
 """
@@ -222,6 +227,31 @@ def cmd_screenshot(out: str) -> None:
     os.rename(tmp, out)
 
 
+def cmd_vpointer(width: str, height: str) -> None:
+    c = Client()
+    c.get_registry()
+    manager = c.bind("zwlr_virtual_pointer_manager_v1", 1)
+    vp = c.new_id()
+    c.send(manager, 0, struct.pack("<II", 0, vp))  # create_virtual_pointer(seat=null)
+    c.roundtrip()
+    print("ok", flush=True)
+    t = 0
+    for line in sys.stdin:
+        cmd, *args = line.split()
+        t += 10
+        if cmd == "abs":  # motion_absolute(time, x, y, x_extent, y_extent)
+            c.send(vp, 1, struct.pack("<IIIII", t, int(args[0]), int(args[1]), int(width), int(height)))
+        elif cmd == "rel":  # motion(time, dx, dy): wl_fixed
+            c.send(vp, 0, struct.pack("<Iii", t, int(args[0]) * 256, int(args[1]) * 256))
+        elif cmd in ("down", "up"):  # button(time, BTN_LEFT, state)
+            c.send(vp, 2, struct.pack("<III", t, 0x110, 1 if cmd == "down" else 0))
+        else:
+            sys.exit(f"vpointer: {line.strip()}?")
+        c.send(vp, 4)  # frame
+        c.roundtrip()
+        print("ok", flush=True)
+
+
 if __name__ == "__main__":
     {"globals": cmd_globals, "lock": cmd_lock, "seccontext": cmd_seccontext,
-     "screenshot": cmd_screenshot}[sys.argv[1]](*sys.argv[2:])
+     "screenshot": cmd_screenshot, "vpointer": cmd_vpointer}[sys.argv[1]](*sys.argv[2:])
