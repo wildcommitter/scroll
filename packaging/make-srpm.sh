@@ -48,7 +48,13 @@ if grep -c '@[A-Z]*@' "$work/SPECS/scroll.spec" >/dev/null; then
 	die "unfilled @...@ field in the spec"
 fi
 
-rpmbuild -bs --define "_topdir $work" "$work/SPECS/scroll.spec" >/dev/null
+# Reproducible: the SRPM depends on the commit only. Its build time (and the cookie,
+# "<host> <time>", which binary RPMs built from it copy) is the commit time, and the
+# relative _topdir keeps the temporary directory out of the scripts in its header.
+sde=$(git -C "$top" log -1 --format=%ct "$commit")
+(cd "$work" && SOURCE_DATE_EPOCH=$sde rpmbuild -bs --define "_topdir ." \
+	--define "_buildhost scroll-secure" --define "use_source_date_epoch_as_buildtime 1" \
+	SPECS/scroll.spec >/dev/null)
 srpm=$(find "$work/SRPMS" -name '*.src.rpm' -print -quit)
 [[ -n $srpm ]] || die "rpmbuild made no SRPM"
 cp "$srpm" "$out/"
